@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, StatusBar, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Switch, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { workerService } from '@/services/worker.service';
 import { Skeleton } from '@/components/Skeleton';
 import { authService } from '@/services/auth.service';
@@ -35,11 +35,10 @@ export default function WorkerProfileScreen() {
   };
 
   const toggleAvailability = async (value: boolean) => {
-    try {
-      // Optimistic update
-      const oldProfile = { ...profile };
-      setProfile({ ...profile, availability: value });
+    const oldProfile = { ...profile };
+    setProfile({ ...profile, availability: value });
 
+    try {
       const response = await workerService.updateProfile({ availability: value });
       if (response.success) {
         setProfile((prev: any) => ({ ...prev, ...response.profile }));
@@ -47,33 +46,39 @@ export default function WorkerProfileScreen() {
         setProfile(oldProfile);
         Alert.alert('Error', 'Failed to update availability');
       }
-    } catch (error) {
+    } catch (error: any) {
+      setProfile(oldProfile);
       console.error('Error updating availability:', error);
-      Alert.alert('Error', 'Failed to update availability');
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'Failed to update availability'
+      );
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#000" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Working Profile</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.content}>
-          <Skeleton width="100%" height={200} borderRadius={20} style={{ marginBottom: 20 }} />
-          <Skeleton width="60%" height={30} borderRadius={5} style={{ marginBottom: 15 }} />
-          <Skeleton width="100%" height={100} borderRadius={10} style={{ marginBottom: 20 }} />
-          <Skeleton width="40%" height={25} borderRadius={5} style={{ marginBottom: 15 }} />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Skeleton width={80} height={35} borderRadius={20} />
-            <Skeleton width={80} height={35} borderRadius={20} />
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Working Profile</Text>
+            <View style={styles.headerSpacer} />
           </View>
-        </View>
-      </SafeAreaView>
+          <View style={styles.content}>
+            <Skeleton width="100%" height={200} borderRadius={20} style={{ marginBottom: 20 }} />
+            <Skeleton width="60%" height={30} borderRadius={5} style={{ marginBottom: 15 }} />
+            <Skeleton width="100%" height={100} borderRadius={10} style={{ marginBottom: 20 }} />
+            <Skeleton width="40%" height={25} borderRadius={5} style={{ marginBottom: 15 }} />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Skeleton width={80} height={35} borderRadius={20} />
+              <Skeleton width={80} height={35} borderRadius={20} />
+            </View>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -86,18 +91,21 @@ export default function WorkerProfileScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Working Profile</Text>
-          <TouchableOpacity onPress={() => router.push('/worker-register' as any)}>
+          <TouchableOpacity onPress={() => router.push('/worker-register' as any)} style={styles.headerActionBtn}>
             <Ionicons name="create-outline" size={24} color="#000" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + insets.bottom }]}
+        >
           {/* Main Profile Info Card */}
           <View style={styles.mainCard}>
             <View style={styles.titleRow}>
@@ -118,18 +126,23 @@ export default function WorkerProfileScreen() {
 
             <View style={styles.statsContainer}>
               <View style={styles.statBox}>
-                <Text style={styles.statVal}>{profile?.experience}</Text>
+                <View style={styles.statValueSlot}>
+                  <Text style={styles.statVal}>{profile?.experience}</Text>
+                </View>
                 <Text style={styles.statLab}>Years Exp.</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
-                <Switch
-                  value={profile?.availability !== false}
-                  onValueChange={toggleAvailability}
-                  trackColor={{ false: '#767577', true: '#FF9500' }}
-                  thumbColor={profile?.availability !== false ? '#fff' : '#f4f3f4'}
-                  ios_backgroundColor="#3e3e3e"
-                />
+                <View style={styles.statValueSlot}>
+                  <Switch
+                    value={profile?.availability !== false}
+                    onValueChange={toggleAvailability}
+                    trackColor={{ false: '#767577', true: '#FF9500' }}
+                    thumbColor={profile?.availability !== false ? '#fff' : '#f4f3f4'}
+                    ios_backgroundColor="#3e3e3e"
+                    style={Platform.OS === 'ios' ? styles.iosSwitch : undefined}
+                  />
+                </View>
                 <Text style={styles.statLab}>{profile?.availability !== false ? 'Available' : 'Busy'}</Text>
               </View>
             </View>
@@ -236,23 +249,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   backBtn: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
+    textAlign: 'center',
   },
   content: {
     padding: 20,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 70,
   },
   mainCard: {
     backgroundColor: '#fff',
@@ -302,34 +330,42 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: '#FAFAFA',
     borderRadius: 15,
-    padding: 15,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
   },
   statBox: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValueSlot: {
+    height: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statVal: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
+    lineHeight: 22,
   },
   statLab: {
     fontSize: 11,
     color: '#999',
-    marginTop: 2,
+    marginTop: 6,
+    textAlign: 'center',
   },
   statDivider: {
     width: 1,
-    height: 30,
+    alignSelf: 'stretch',
     backgroundColor: '#EEE',
+    marginHorizontal: 8,
   },
-  rowCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  iosSwitch: {
+    transform: [{ scaleX: 0.92 }, { scaleY: 0.92 }],
   },
   section: {
     marginBottom: 25,

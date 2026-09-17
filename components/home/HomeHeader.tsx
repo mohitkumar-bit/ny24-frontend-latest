@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LocationBar } from '@/components/home/LocationBar';
 import { Logo } from '@/components/Logo';
 import { CountBadge } from '@/components/CountBadge';
@@ -17,10 +16,8 @@ export const HomeHeader = ({
   onNotificationPress,
   onLocationPress,
 }: HomeHeaderProps) => {
-  const insets = useSafeAreaInsets();
-
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
+    <View style={styles.container}>
       <View style={styles.topRow}>
         <Logo size={40} />
         <TouchableOpacity style={styles.notificationBtn} onPress={onNotificationPress}>
@@ -39,8 +36,9 @@ export const HomeHeader = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 12,
+    paddingTop: 6,
+    paddingBottom: 10,
+    gap: 10,
   },
   topRow: {
     flexDirection: 'row',

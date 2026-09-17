@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { categoryService, Category } from '@/services/category.service';
 import { AGE_MAX_DIGITS, commitAgeInput, finalizeAge, sanitizeAgeInput } from '@/utils/ageInput';
+import { preventAndroidChipTextClip } from '@/utils/androidTextFix';
 
 const RATE_MAX_DIGITS = 8;
 
@@ -160,6 +161,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
       <Text
         style={[
           styles.categoryText,
+          preventAndroidChipTextClip(),
           selectedCategory === cat._id && styles.activeCategoryText,
         ]}
       >
@@ -168,9 +170,13 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
     </TouchableOpacity>
   );
 
+  if (!isVisible) {
+    return null;
+  }
+
   return (
     <Modal
-      visible={isVisible}
+      visible
       animationType="slide"
       transparent={true}
       onRequestClose={onClose}
@@ -341,6 +347,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                     >
                       <Text style={[
                         styles.categoryText,
+                        preventAndroidChipTextClip(),
                         gender === g && styles.activeCategoryText
                       ]}>{g}</Text>
                     </TouchableOpacity>

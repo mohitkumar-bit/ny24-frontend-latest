@@ -29,6 +29,8 @@ type LocationPickerModalProps = {
   required?: boolean;
   /** Show first-time onboarding copy. */
   isFirstTime?: boolean;
+  /** Leave space for bottom tab bar so navigation stays tappable (iOS). */
+  reserveTabBarSpace?: boolean;
 };
 
 export function LocationPickerModal({
@@ -37,8 +39,10 @@ export function LocationPickerModal({
   onLocationSet,
   required = false,
   isFirstTime = false,
+  reserveTabBarSpace = false,
 }: LocationPickerModalProps) {
   const insets = useSafeAreaInsets();
+  const tabBarClearance = reserveTabBarSpace ? 60 + Math.max(insets.bottom, 10) : 0;
   const { location, detecting, setLocation, detectLocation } = useAppLocation();
   const [cityInput, setCityInput] = useState('');
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
@@ -160,9 +164,13 @@ export function LocationPickerModal({
     ? 'Please enter your location to see nearby jobs and workers in your area.'
     : 'Jobs and workers near you will be shown based on this location';
 
+  if (!visible) {
+    return null;
+  }
+
   return (
     <Modal
-      visible={visible}
+      visible
       animationType="slide"
       transparent
       onRequestClose={handleClose}
@@ -172,7 +180,7 @@ export function LocationPickerModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <TouchableOpacity
-          style={styles.backdrop}
+          style={[styles.backdrop, tabBarClearance > 0 && { bottom: tabBarClearance }]}
           activeOpacity={1}
           onPress={handleClose}
           disabled={required}

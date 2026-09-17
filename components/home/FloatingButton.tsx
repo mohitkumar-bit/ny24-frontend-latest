@@ -1,19 +1,14 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-
-const TAB_BAR_CONTENT_HEIGHT = 60;
 
 export const FloatingButton = () => {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const bottomOffset = TAB_BAR_CONTENT_HEIGHT + Math.max(insets.bottom, 10) + 16;
 
   return (
     <TouchableOpacity
-      style={[styles.button, { bottom: bottomOffset }]}
+      style={[styles.button, { bottom: 16 }]}
       activeOpacity={0.8}
       onPress={() => router.push('/create-post' as any)}
     >

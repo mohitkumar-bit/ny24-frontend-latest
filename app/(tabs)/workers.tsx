@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, StatusBar, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Pressable, StatusBar, RefreshControl, Keyboard } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { workerService } from '@/services/worker.service';
@@ -8,8 +9,11 @@ import { WorkerCard, Worker } from '@/components/workers/WorkerCard';
 import { Skeleton } from '@/components/Skeleton';
 import { FilterModal } from '@/components/home/FilterModal';
 import { LocationPickerModal } from '@/components/home/LocationPickerModal';
+import { SearchCategorySuggestions } from '@/components/home/SearchCategorySuggestions';
 import { WorkersHeader } from '@/components/workers/WorkersHeader';
 import { useAppLocation } from '@/contexts/AppLocationContext';
+import type { Category } from '@/services/category.service';
+import { buildNearbyParams } from '@/utils/nearbyParams';
 
 const WorkersScreen = () => {
   const { location } = useAppLocation();
@@ -17,64 +21,124 @@ const WorkersScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  const headerHeightRef = useRef(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const activeFiltersRef = useRef<any>({});
+  const searchQueryRef = useRef('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchBlurRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectingSuggestionRef = useRef(false);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [isLocationPickerVisible, setIsLocationPickerVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any>({});
+  activeFiltersRef.current = activeFilters;
+  searchQueryRef.current = searchQuery;
 
   const featuredWorkers = workers.filter((w) => (w as any).isFeatured);
   const organicWorkers = workers.filter((w) => !(w as any).isFeatured);
 
-  const fetchWorkers = useCallback(async (filters: any = activeFilters, query: string = searchQuery) => {
+  const clearSearchTimers = () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchBlurRef.current) clearTimeout(searchBlurRef.current);
+  };
+
+  const fetchWorkers = useCallback(async (filters: any, query: string) => {
     setLoading(true);
     try {
       const params: any = { ...filters };
-      if (query) {
-        params.search = query;
-        if (!activeFilters?.city) delete params.city;
-      } else if (location?.city && !params.city) {
-        params.city = location.city;
+      const trimmedQuery = query.trim();
+      if (trimmedQuery) {
+        params.search = trimmedQuery;
+        if (!filters?.city) delete params.city;
+      } else if (filters?.city) {
+        params.city = filters.city;
+      } else {
+        Object.assign(
+          params,
+          buildNearbyParams(location, { hasSearch: false, filterCity: filters?.city })
+        );
       }
 
       const data = await workerService.searchWorkers(params);
-      setWorkers(data);
+      setWorkers(Array.isArray(data) ? data.filter((w) => w?.user?._id) : []);
     } catch (error) {
       console.error('Error fetching workers:', error);
     } finally {
       setLoading(false);
     }
-  }, [activeFilters, searchQuery, location?.city]);
+  }, [location]);
 
   useEffect(() => {
-    const filters = location?.city
-      ? { ...activeFilters, city: location.city }
-      : activeFilters;
-    fetchWorkers(filters, searchQuery);
-  }, [location?.city]);
+    void fetchWorkers(activeFiltersRef.current, searchQueryRef.current);
+  }, [fetchWorkers, location?.city, location?.state, location?.coordinates]);
 
-  const handleSearch = async (query: string, filters: any = activeFilters) => {
+  const handleSearchInput = (query: string, filters: any = activeFiltersRef.current) => {
+    setSearchQuery(query);
+    setShowSuggestions(query.trim().length > 0);
+
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      void fetchWorkers(filters, query);
+    }, 400);
+  };
+
+  const closeSuggestions = useCallback(() => {
+    if (searchBlurRef.current) clearTimeout(searchBlurRef.current);
+    selectingSuggestionRef.current = false;
+    setShowSuggestions(false);
+  }, []);
+
+  const handleSearchSubmit = async (query: string = '', filters: any = activeFiltersRef.current) => {
+    clearSearchTimers();
+    closeSuggestions();
     setSearchQuery(query);
     await fetchWorkers(filters, query);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (searchBlurRef.current) clearTimeout(searchBlurRef.current);
+    };
+  }, []);
+
+  const handleSelectSuggestedCategory = (category: Category) => {
+    selectingSuggestionRef.current = true;
+    clearSearchTimers();
+    Keyboard.dismiss();
+    searchInputRef.current?.blur();
+    const updatedFilters = { ...activeFiltersRef.current, category: category._id };
+    setActiveCategory(category._id);
+    setActiveFilters(updatedFilters);
+    setShowSuggestions(false);
+    setSearchQuery('');
+    void fetchWorkers(updatedFilters, '');
+    selectingSuggestionRef.current = false;
   };
 
   const handleCategorySelect = (categoryId: string | null) => {
     const newCategory = activeCategory === categoryId ? null : categoryId;
     setActiveCategory(newCategory);
-    const updatedFilters = { ...activeFilters, category: newCategory || undefined };
+    const updatedFilters = { ...activeFiltersRef.current, category: newCategory || undefined };
     setActiveFilters(updatedFilters);
-    handleSearch(searchQuery, updatedFilters);
+    void handleSearchSubmit('', updatedFilters);
   };
 
   const handleApplyFilters = (filters: any) => {
+    clearSearchTimers();
     setActiveFilters(filters);
     setActiveCategory(filters.category || null);
-    setSearchQuery(filters.city || '');
-    handleSearch(filters.city || '', filters);
+    setSearchQuery('');
+    setShowSuggestions(false);
+    void fetchWorkers(filters, '');
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchWorkers();
+    await fetchWorkers(activeFiltersRef.current, searchQueryRef.current);
     setRefreshing(false);
   };
 
@@ -115,45 +179,89 @@ const WorkersScreen = () => {
         locations={[0, 0.2, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.stickyHeader}>
+      <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+        <View
+          style={styles.stickyHeader}
+          onLayout={(e) => {
+            const next = Math.ceil(e.nativeEvent.layout.height);
+            if (next <= 0) return;
+            if (Math.abs(next - headerHeightRef.current) < 8) return;
+            headerHeightRef.current = next;
+            setHeaderHeight(next);
+          }}
+        >
           <LinearGradient
             colors={['#FF9500', '#FFFFFF']}
             style={StyleSheet.absoluteFill}
           />
           <WorkersHeader onLocationPress={() => setIsLocationPickerVisible(true)} />
 
-          <View style={styles.searchRow}>
-            <View style={styles.searchBar}>
-              <Ionicons name="search-outline" size={22} color="#999" style={styles.searchIcon} />
-              <TextInput
-                placeholder="Search by category, city, name..."
-                placeholderTextColor="#999"
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={(text) => handleSearch(text)}
-                onSubmitEditing={() => handleSearch(searchQuery)}
-                returnKeyType="search"
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    handleSearch('', { ...activeFilters, city: undefined });
+          <View style={styles.searchBlock}>
+            <View style={styles.searchContainer}>
+              <View style={styles.searchRow}>
+              <View style={styles.searchBar}>
+                <Ionicons name="search-outline" size={22} color="#999" style={styles.searchIcon} />
+                <TextInput
+                  ref={searchInputRef}
+                  placeholder="Search by category, city, name..."
+                  placeholderTextColor="#999"
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={(text) => handleSearchInput(text)}
+                  onFocus={() => {
+                    if (searchBlurRef.current) clearTimeout(searchBlurRef.current);
+                    if (searchQuery.trim().length > 0) setShowSuggestions(true);
                   }}
-                >
-                  <Ionicons name="close-circle" size={20} color="#ccc" />
-                </TouchableOpacity>
-              )}
+                  onBlur={() => {
+                    if (selectingSuggestionRef.current) return;
+                    searchBlurRef.current = setTimeout(() => {
+                      selectingSuggestionRef.current = false;
+                      setShowSuggestions(false);
+                    }, 250);
+                  }}
+                  onSubmitEditing={() => {
+                    void handleSearchSubmit();
+                  }}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      closeSuggestions();
+                      handleSearchInput('', { ...activeFilters, city: undefined });
+                      void handleSearchSubmit('', { ...activeFilters, city: undefined });
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#ccc" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.filterBtnMain}
+                onPress={() => {
+                  closeSuggestions();
+                  setIsFilterVisible(true);
+                }}
+              >
+                <Ionicons name="options-outline" size={24} color="#fff" />
+                {Object.keys(activeFilters).length > 0 && <View style={styles.filterBadge} />}
+              </TouchableOpacity>
+
+              {showSuggestions && searchQuery.trim().length > 0 ? (
+                <SearchCategorySuggestions
+                  query={searchQuery}
+                  onSelect={handleSelectSuggestedCategory}
+                  onDropdownPressIn={() => {
+                    if (searchBlurRef.current) clearTimeout(searchBlurRef.current);
+                    selectingSuggestionRef.current = true;
+                    requestAnimationFrame(() => searchInputRef.current?.focus());
+                  }}
+                />
+              ) : null}
+              </View>
             </View>
-            <TouchableOpacity
-              style={styles.filterBtnMain}
-              onPress={() => setIsFilterVisible(true)}
-            >
-              <Ionicons name="options-outline" size={24} color="#fff" />
-              {Object.keys(activeFilters).length > 0 && <View style={styles.filterBadge} />}
-            </TouchableOpacity>
           </View>
 
           <View style={styles.categoriesSection}>
@@ -164,8 +272,16 @@ const WorkersScreen = () => {
           </View>
         </View>
 
+        {showSuggestions && searchQuery.trim().length > 0 ? (
+          <Pressable
+            style={[styles.suggestionsBackdrop, { top: headerHeight }]}
+            onPress={closeSuggestions}
+          />
+        ) : null}
+
         <FlatList
           data={loading ? ([1, 2, 3, 4] as any) : organicWorkers}
+          scrollEnabled={!showSuggestions}
           keyExtractor={(item, index) => (loading ? `skeleton-${index}` : (item as Worker)._id)}
           renderItem={({ item }) => loading ? (
             <View style={styles.skeletonCard}>
@@ -227,6 +343,7 @@ const WorkersScreen = () => {
         visible={isLocationPickerVisible}
         onClose={() => setIsLocationPickerVisible(false)}
       />
+
     </View>
   );
 };
@@ -242,26 +359,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stickyHeader: {
-    zIndex: 10,
+    zIndex: 20,
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    overflow: 'hidden',
+    overflow: 'visible',
+  },
+  searchBlock: {
+    position: 'relative',
+    zIndex: 300,
+    elevation: 300,
+    overflow: 'visible',
+  },
+  suggestionsBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 25,
   },
   listHeader: {
     paddingTop: 4,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
   emptyListContent: {
     flexGrow: 1,
   },
-  searchRow: {
-    flexDirection: 'row',
+  searchContainer: {
     paddingHorizontal: 20,
-    gap: 12,
     marginBottom: 5,
+  },
+  searchRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   searchBar: {
     flex: 1,
@@ -310,8 +444,9 @@ const styles = StyleSheet.create({
     borderColor: '#FF9500',
   },
   categoriesSection: {
-    width: "100%",
+    width: '100%',
     marginBottom: 0,
+    zIndex: 1,
   },
   categoryList: {
     paddingRight: 20,

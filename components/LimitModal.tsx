@@ -1,41 +1,40 @@
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import {
+  PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
+  PROFESSIONAL_TOOLS_INACTIVE_TITLE,
+} from '@/utils/professionalTools';
 
 interface LimitModalProps {
   visible: boolean;
   onClose: () => void;
-  onUpgrade: () => void;
+  /** @deprecated Upgrade/payment is disabled — kept optional for call-site compatibility */
+  onUpgrade?: () => void;
   title?: string;
   message?: string;
   plan?: string;
   icon?: keyof typeof Ionicons.glyphMap;
 }
 
-export const LimitModal: React.FC<LimitModalProps> = ({ 
-  visible, 
-  onClose, 
-  onUpgrade, 
-  title = 'Chat Slots Full',
-  message,
-  plan = 'Free',
-  icon = 'chatbubbles-outline',
+export const LimitModal: React.FC<LimitModalProps> = ({
+  visible,
+  onClose,
+  title = PROFESSIONAL_TOOLS_INACTIVE_TITLE,
+  message = PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
+  icon = 'construct-outline',
 }) => {
+  if (!visible) {
+    return null;
+  }
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.7)' }]} />
-        
+
         <View style={styles.modalContainer}>
-          <LinearGradient
-            colors={['#ffffff', '#f8fafc']}
-            style={styles.card}
-          >
+          <LinearGradient colors={['#ffffff', '#f8fafc']} style={styles.card}>
             <View style={styles.iconContainer}>
               <View style={styles.iconBg}>
                 <Ionicons name={icon} size={32} color="#FF9500" />
@@ -46,33 +45,14 @@ export const LimitModal: React.FC<LimitModalProps> = ({
             </View>
 
             <Text style={styles.title}>{title}</Text>
-            <Text style={styles.planBadge}>{plan} Plan</Text>
-            
-            <Text style={styles.message}>
-              {message || `All 3 chat slots are in use. Wait for a slot to expire (24h after opening), unpin a chat, or upgrade for more slots.`}
-            </Text>
 
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity 
-                style={styles.cancelBtn} 
-                onPress={onClose}
-              >
-                <Text style={styles.cancelText}>Maybe Later</Text>
-              </TouchableOpacity>
+            <Text style={styles.message}>{message}</Text>
 
-              <TouchableOpacity 
-                style={styles.upgradeBtn} 
-                onPress={onUpgrade}
-              >
-                <LinearGradient
-                  colors={['#FF9500', '#FFB347']}
-                  style={styles.gradientBtn}
-                >
-                  <Text style={styles.upgradeText}>Upgrade Now</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.okBtn} onPress={onClose} activeOpacity={0.85}>
+              <LinearGradient colors={['#FF9500', '#FFB347']} style={styles.gradientBtn}>
+                <Text style={styles.okText}>OK</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </LinearGradient>
         </View>
       </View>
@@ -128,23 +108,11 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
-  },
-  planBadge: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FF9500',
-    backgroundColor: '#FFF5E6',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginBottom: 20,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   message: {
     fontSize: 15,
@@ -153,11 +121,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 30,
   },
-  buttonContainer: {
-    width: '100%',
-    gap: 12,
-  },
-  upgradeBtn: {
+  okBtn: {
     width: '100%',
     height: 55,
     borderRadius: 16,
@@ -168,22 +132,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
   },
-  upgradeText: {
+  okText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  cancelBtn: {
-    width: '100%',
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cancelText: {
-    color: '#94A3B8',
-    fontSize: 15,
-    fontWeight: '600',
   },
 });

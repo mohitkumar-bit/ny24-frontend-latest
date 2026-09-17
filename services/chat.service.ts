@@ -54,7 +54,10 @@ export const getConversations = async () => {
 
 export const getMessages = async (conversationId: string) => {
   const response = await api.get(`/chat/messages/${conversationId}`);
-  return response.data;
+  const data = response.data;
+  if (Array.isArray(data)) return data;
+  if (data?.messages && Array.isArray(data.messages)) return data.messages;
+  return [];
 };
 
 export const togglePinConversation = async (conversationId: string) => {

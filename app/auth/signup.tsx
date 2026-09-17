@@ -7,13 +7,13 @@ import { CustomInput } from '@/components/CustomInput';
 import { CustomButton } from '@/components/CustomButton';
 import { authService } from '@/services/auth.service';
 import { getPostAuthRoute } from '@/utils/locationNavigation';
-import { getPasswordChecks, PasswordRequirements } from '@/components/PasswordRequirements';
 
 export default function SignupPage() {
+  const [step, setStep] = useState<'details' | 'otp'>('details');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -22,31 +22,67 @@ export default function SignupPage() {
     setPhone(text.replace(/\D/g, '').slice(0, 10));
   };
 
-  const handleSignup = async () => {
-    if (!name || !email || !phone || !password) {
-      setError('Please fill in all fields');
+  const handleSendOtp = async () => {
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      setError('All fields are required');
       return;
     }
-
     if (phone.length !== 10) {
       setError('Phone number must be exactly 10 digits');
-      return;
-    }
-
-    if (!getPasswordChecks(password).isValid) {
-      setError('Please meet all password requirements');
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const user = await authService.signUp({ name, email, phone, password });
+      await authService.sendOtp({
+        phone,
+        purpose: 'register',
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+      });
+      setOtp('');
+      setStep('otp');
+    } catch (err: any) {
+      const code = err.response?.data?.code;
+      if (code === 'USER_EXISTS') {
+        setError('An account already exists with this number. Please sign in instead.');
+      } else {
+        setError(err.response?.data?.message || 'Failed to send OTP');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      setError('All fields are required');
+      return;
+    }
+    if (otp.length !== 6) {
+      setError('Enter the 6-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const user = await authService.verifyOtp({
+        phone,
+        otp,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+      });
       const nextRoute = await getPostAuthRoute(user);
       router.replace(nextRoute as any);
     } catch (err: any) {
-      console.error("Signup Error:", err);
-      setError(err.response?.data?.message || 'Failed to create account');
+      const code = err.response?.data?.code;
+      if (code === 'USER_EXISTS') {
+        setError('An account already exists with this number. Please sign in instead.');
+      } else {
+        setError(err.response?.data?.message || 'Invalid OTP');
+      }
     } finally {
       setLoading(false);
     }
@@ -65,50 +101,71 @@ export default function SignupPage() {
             <View style={styles.header}>
               <Logo size={70} />
               <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.subtitle}>Sign up to get started</Text>
+              <Text style={styles.subtitle}>
+                {step === 'details'
+                  ? 'Sign up with your phone number'
+                  : `OTP sent to +91 ${phone}. Enter OTP to finish registration.`}
+              </Text>
               {error && <Text style={styles.errorText}>{error}</Text>}
             </View>
 
             <View style={styles.form}>
-              <CustomInput
-                label="Full Name"
-                placeholder="Rahul Sharma"
-                value={name}
-                onChangeText={setName}
-                icon="person-outline"
-              />
-              <CustomInput
-                label="Email"
-                placeholder="rahul.sharma@gmail.com"
-                value={email}
-                onChangeText={setEmail}
-                icon="mail-outline"
-                keyboardType="email-address"
-              />
-              <CustomInput
-                label="Phone Number"
-                placeholder="9876543210"
-                value={phone}
-                onChangeText={handlePhoneChange}
-                icon="call-outline"
-                keyboardType="phone-pad"
-                maxLength={10}
-              />
-              <CustomInput
-                label="Password"
-                placeholder="••••••••••"
-                value={password}
-                onChangeText={setPassword}
-                icon="lock-closed-outline"
-                isPassword
-              />
-              <PasswordRequirements password={password} />
-
-              <CustomButton
-                title="Sign Up"
-                onPress={handleSignup}
-                loading={loading}
-              />
+              {step === 'details' ? (
+                <>
+                  <CustomInput
+                    label="Full Name"
+                    placeholder="Rahul Sharma"
+                    value={name}
+                    onChangeText={setName}
+                    icon="person-outline"
+                  />
+                  <CustomInput
+                    label="Email"
+                    placeholder="rahul.sharma@gmail.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    icon="mail-outline"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <CustomInput
+                    label="Phone Number"
+                    placeholder="9876543210"
+                    value={phone}
+                    onChangeText={handlePhoneChange}
+                    icon="call-outline"
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                  />
+                  <CustomButton title="Send OTP" onPress={handleSendOtp} loading={loading} />
+                </>
+              ) : (
+                <>
+                  <CustomInput
+                    label="Enter OTP"
+                    placeholder="6-digit OTP"
+                    value={otp}
+                    onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                    icon="lock-closed-outline"
+                    keyboardType="numeric"
+                    maxLength={6}
+                  />
+                  <Text style={styles.hint}>Enter the OTP sent to your phone</Text>
+                  <CustomButton title="Verify & Sign Up" onPress={handleVerifyOtp} loading={loading} />
+                  <TouchableOpacity
+                    onPress={() => {
+                      setStep('details');
+                      setOtp('');
+                      setError(null);
+                    }}
+                    style={styles.secondaryAction}>
+                    <Text style={styles.signUpText}>Edit details</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSendOtp} style={styles.secondaryAction} disabled={loading}>
+                    <Text style={styles.footerText}>Resend OTP</Text>
+                  </TouchableOpacity>
+                </>
+              )}
 
               <View style={styles.footer}>
                 <Text style={styles.footerText}>Already have an account? </Text>
@@ -162,6 +219,16 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 5,
   },
+  hint: {
+    fontSize: 13,
+    color: '#64748B',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    marginTop: 14,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -179,9 +246,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 14,
-    marginTop: 10,
+    marginTop: 12,
     textAlign: 'center',
-    fontWeight: '500',
+    fontSize: 14,
   },
 });

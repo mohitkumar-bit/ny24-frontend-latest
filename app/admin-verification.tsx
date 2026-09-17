@@ -53,7 +53,7 @@ export default function AdminVerificationScreen() {
 
   const handleReject = async (userId: string) => {
     try {
-      await adminVerificationService.reject(userId, secret.trim(), 'Documents could not be verified');
+      await adminVerificationService.reject(userId, secret.trim(), 'Aadhaar could not be verified');
       Alert.alert('Rejected', 'User was notified to resubmit.');
       loadPending();
     } catch (err: any) {
@@ -98,9 +98,12 @@ export default function AdminVerificationScreen() {
             <Text style={[styles.meta, item.canApprove ? styles.ready : styles.wait]}>
               {item.canApprove ? 'Ready to approve' : 'Waiting for 24h window'}
             </Text>
-            {item.selfieUrl && (
+            {item.maskedAadhaar ? (
+              <Text style={styles.meta}>Aadhaar: {item.maskedAadhaar}</Text>
+            ) : null}
+            {item.selfieUrl ? (
               <Image source={{ uri: item.selfieUrl }} style={styles.thumb} />
-            )}
+            ) : null}
             <View style={styles.actions}>
               <TouchableOpacity
                 style={[styles.approveBtn, !item.canApprove && { opacity: 0.5 }]}

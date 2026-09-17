@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   Image,
   Alert,
@@ -14,9 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '@/services/auth.service';
 import { handleAuthFailure } from '@/services/authSession';
 import { Skeleton } from '@/components/Skeleton';
@@ -48,6 +48,8 @@ const ProfileMenuItem = ({
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabBarClearance = 60 + (insets.bottom > 0 ? insets.bottom : 10);
   const [user, setUser] = React.useState<User | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [uploadingPhoto, setUploadingPhoto] = React.useState(false);
@@ -85,47 +87,14 @@ export default function ProfileScreen() {
 
   const pickFromGallery = async () => {
     setShowPhotoOptions(false);
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Gallery access is needed to select a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.45,
-    });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      await uploadProfilePhoto(result.assets[0].uri);
-    }
+    const uri = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.45 });
+    if (uri) await uploadProfilePhoto(uri);
   };
 
   const pickFromCamera = async () => {
     setShowPhotoOptions(false);
-    if (Platform.OS === 'web') {
-      Alert.alert('Camera unavailable', 'Please choose a photo from your gallery on web.');
-      return;
-    }
-
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.45,
-    });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      await uploadProfilePhoto(result.assets[0].uri);
-    }
+    const uri = await pickImageFromCamera({ aspect: [1, 1], quality: 0.45 });
+    if (uri) await uploadProfilePhoto(uri);
   };
 
   const uploadProfilePhoto = async (uri: string) => {
@@ -199,11 +168,6 @@ export default function ProfileScreen() {
       return;
     }
 
-    if (user?.canVerify) {
-      router.push('/verify' as any);
-      return;
-    }
-
     setShowVerifyUpgradeModal(true);
   };
 
@@ -223,8 +187,11 @@ export default function ProfileScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: tabBarClearance + 16 }}
+        >
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Profile</Text>
@@ -325,21 +292,6 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>2</Text>
-              <Text style={styles.statLabel}>My Ads</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>4.8</Text>
-              <Text style={styles.statLabel}>Rating</Text>
-            </View>
-          </View>
-
-          {/* Worker Profile Detail Section */}
-
           {/* Menu Section */}
           <View style={styles.menuSection}>
             <ProfileMenuItem
@@ -355,19 +307,9 @@ export default function ProfileScreen() {
               />
             )}
             <ProfileMenuItem
-              icon="star-outline"
-              title="Subscription"
-              onPress={() => router.push('/subscription' as any)}
-            />
-            <ProfileMenuItem
               icon="bookmark-outline"
               title="Saved Jobs"
               onPress={() => router.push('/saved' as any)}
-            />
-            <ProfileMenuItem
-              icon="lock-closed-outline"
-              title="Change Password"
-              onPress={() => router.push('/change-password' as any)}
             />
 
             <View style={styles.sectionDivider} />
@@ -416,12 +358,8 @@ export default function ProfileScreen() {
       <LimitModal
         visible={showVerifyUpgradeModal}
         onClose={() => setShowVerifyUpgradeModal(false)}
-        onUpgrade={() => {
-          setShowVerifyUpgradeModal(false);
-          router.push('/subscription' as any);
-        }}
-        title="Get Verified"
-        message="Upgrade to the Business plan to submit verification documents and get a verified badge on your profile."
+        title="Verification"
+        message="You have to complete 180 days of logins to reach verification badge."
         plan={currentPlanLabel}
         icon="shield-checkmark-outline"
       />
@@ -460,7 +398,7 @@ export default function ProfileScreen() {
             <Ionicons name="warning-outline" size={40} color="#EF4444" />
             <Text style={styles.pendingModalTitle}>Delete account?</Text>
             <Text style={styles.pendingModalText}>
-              Are you sure you want to delete your account? This action cannot be undone.
+              Are you sure you want to delete your account? Your request will be processed within 48 hours. After that, your account and data will be permanently removed.
             </Text>
             <View style={styles.removeConfirmActions}>
               <TouchableOpacity
@@ -491,7 +429,7 @@ export default function ProfileScreen() {
             <Ionicons name="checkmark-circle-outline" size={40} color="#22C55E" />
             <Text style={styles.pendingModalTitle}>Request submitted</Text>
             <Text style={styles.pendingModalText}>
-              Your account deletion request has been submitted. It will be processed within 2 to 3 working days.
+              Your account deletion request has been submitted. It will be processed within 48 hours. You can continue using the app until then.
             </Text>
             <TouchableOpacity
               style={styles.pendingModalBtn}
@@ -611,8 +549,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 40,
-    paddingBottom: 120
   },
   safeArea: {
     flex: 1,
@@ -788,7 +724,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingTop: 10,
     paddingHorizontal: 10,
-    flex: 1,
   },
   menuItem: {
     flexDirection: 'row',

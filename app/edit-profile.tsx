@@ -18,7 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { authService } from '@/services/auth.service';
 import { handleAuthFailure } from '@/services/authSession';
 import { fetchLiveLocation, getLocationErrorMessage } from '@/services/location.service';
@@ -107,47 +107,14 @@ export default function EditProfileScreen() {
 
   const pickFromGallery = async () => {
     setShowPhotoOptions(false);
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Gallery access is needed to select a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.45,
-    });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      await uploadProfilePhoto(result.assets[0].uri);
-    }
+    const uri = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.45 });
+    if (uri) await uploadProfilePhoto(uri);
   };
 
   const pickFromCamera = async () => {
     setShowPhotoOptions(false);
-    if (Platform.OS === 'web') {
-      Alert.alert('Camera unavailable', 'Please choose a photo from your gallery on web.');
-      return;
-    }
-
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.45,
-    });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      await uploadProfilePhoto(result.assets[0].uri);
-    }
+    const uri = await pickImageFromCamera({ aspect: [1, 1], quality: 0.45 });
+    if (uri) await uploadProfilePhoto(uri);
   };
 
   const uploadProfilePhoto = async (uri: string) => {

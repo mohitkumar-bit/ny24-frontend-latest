@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, StatusBar, Platform, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, StatusBar, Platform, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Video, ResizeMode } from 'expo-av';
 import { authService } from '@/services/auth.service';
 import { jobService, JobPost } from '@/services/job.service';
+import { getPlayableVideoUrl } from '@/services/api';
 import { applicationService } from '@/services/application.service';
 import { checkChatLimit } from '@/services/chat.service';
 import { callRequestService } from '@/services/callRequest.service';
@@ -13,9 +15,14 @@ import { Skeleton } from '@/components/Skeleton';
 import { LimitModal } from '@/components/LimitModal';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { saveService } from '@/services/save.service';
+import { showProfessionalToolsInactive } from '@/utils/professionalTools';
+import { ReportModal } from '@/components/ReportModal';
+import { ReportOptionsMenu } from '@/components/ReportOptionsMenu';
+import { reportPost } from '@/services/report.service';
 
 export default function DetailScreen() {
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : String(params.id || '');
   const router = useRouter();
   const [job, setJob] = React.useState<JobPost | null>(null);
   const [user, setUser] = React.useState<User | null>(null);
@@ -24,6 +31,17 @@ export default function DetailScreen() {
   const [requestingCall, setRequestingCall] = React.useState(false);
   const [isSaved, setIsSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [showFeatureConfirm, setShowFeatureConfirm] = React.useState(false);
+  const [featuring, setFeaturing] = React.useState(false);
+  const [quota, setQuota] = React.useState<{
+    plan: 'free' | 'pro' | 'business';
+    extraFeaturePrice: number;
+    canFeatureFree: boolean;
+  } | null>(null);
+  const [showReportModal, setShowReportModal] = React.useState(false);
+  const [submittingReport, setSubmittingReport] = React.useState(false);
 
   React.useEffect(() => {
     fetchData();
@@ -31,13 +49,21 @@ export default function DetailScreen() {
 
   const fetchData = async () => {
     try {
-      const [jobData, userData, savedJobs] = await Promise.all([
+      const [jobData, userData, savedJobs, quotaData] = await Promise.all([
         jobService.getJobById(id as string),
         authService.getProfile().catch(() => null),
         saveService.getSavedJobs().catch(() => []),
+        jobService.getQuota().catch(() => null),
       ]);
       setJob(jobData);
       setUser(userData);
+      if (quotaData) {
+        setQuota({
+          plan: quotaData.plan,
+          extraFeaturePrice: quotaData.extraFeaturePrice,
+          canFeatureFree: quotaData.canFeatureFree,
+        });
+      }
       setIsSaved(
         Array.isArray(savedJobs) &&
           savedJobs.some((j: any) => String(j._id) === String(id))
@@ -72,26 +98,46 @@ export default function DetailScreen() {
     }
   };
 
-  const handleDelete = async () => {
-    Alert.alert(
-      "Delete Job",
-      "Are you sure you want to delete this job post?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await jobService.deleteJob(id as string);
-              router.replace('/my-ads' as any);
-            } catch (err: any) {
-              alert(err.response?.data?.message || 'Failed to delete job');
-            }
-          }
-        }
-      ]
-    );
+  const handleDelete = () => {
+    if (deleting) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!id || deleting) return;
+    try {
+      setDeleting(true);
+      await jobService.deleteJob(id);
+      setShowDeleteConfirm(false);
+      router.replace('/my-ads' as any);
+    } catch (err: any) {
+      setDeleting(false);
+      Alert.alert('Error', err.response?.data?.message || 'Failed to delete job');
+    }
+  };
+
+  const confirmFeature = async () => {
+    if (!id || featuring) return;
+    if (!quota?.canFeatureFree) {
+      setShowFeatureConfirm(false);
+      showProfessionalToolsInactive();
+      return;
+    }
+    try {
+      setFeaturing(true);
+      const order = await jobService.createFeatureOrder(id);
+      setShowFeatureConfirm(false);
+      if (!order.paid) {
+        Alert.alert('Featured', order.message || 'This post is now featured.');
+        fetchData();
+        return;
+      }
+      showProfessionalToolsInactive();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Could not feature this post');
+    } finally {
+      setFeaturing(false);
+    }
   };
 
   const handleCall = async () => {
@@ -159,9 +205,10 @@ export default function DetailScreen() {
         router.push({
           pathname: '/chat/[id]' as any,
           params: {
-            id: job.author._id,
+            id: 'new',
             name: job.author.name,
-            avatarLetter: job.author.name[0]
+            avatarLetter: job.author.name[0],
+            receiverId: job.author._id,
           }
         });
       } catch (error: any) {
@@ -188,7 +235,39 @@ export default function DetailScreen() {
     }
   };
 
-  const isAuthor = !loading && user && job && String(user.id) === String(job.author?._id);
+  const authorId =
+    job?.author && typeof job.author === 'object' ? job.author._id : job?.author;
+  const userId = user?.id || (user as any)?._id;
+  const isAuthor = !loading && !!userId && !!authorId && String(userId) === String(authorId);
+  const canShowFeature =
+    isAuthor &&
+    !job?.isFeatured &&
+    (quota?.canFeatureFree || quota?.plan === 'pro' || quota?.plan === 'business');
+
+  const handleReportPress = () => {
+    if (!user) {
+      router.push('/auth/login' as any);
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const handleSubmitReport = async (reason: string, details: string) => {
+    if (!job?._id) return;
+    setSubmittingReport(true);
+    try {
+      await reportPost(job._id, { reason, details });
+      setShowReportModal(false);
+      Alert.alert(
+        'Report submitted',
+        'Thank you. Our team will review this report and take action if needed.'
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Could not submit report');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
 
   const handleToggleSave = async () => {
     if (!user) {
@@ -213,6 +292,7 @@ export default function DetailScreen() {
 
   const gradient = ['#FF9500', '#FFD200'];
   const coverImage = job?.images?.[0];
+  const isVideoPost = !!(job?.isVideoPost && job?.videoUrl);
   const headerIcon =
     (job?.categories?.[0]?.icon as keyof typeof Ionicons.glyphMap) || 'briefcase-outline';
 
@@ -291,18 +371,23 @@ export default function DetailScreen() {
       <LimitModal 
         visible={showLimitModal}
         onClose={() => setShowLimitModal(false)}
-        onUpgrade={() => {
-          setShowLimitModal(false);
-          router.push('/subscription');
-        }}
-        message={modalMessage}
+        title="Chat slots are full"
+        message="Chat slots are full. Try after 24 hours."
         plan={modalPlan}
       />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Header Image/Gradient Section */}
-        <View style={styles.headerContainer}>
-          {coverImage ? (
+        <View style={[styles.headerContainer, isVideoPost && styles.videoHeaderContainer]}>
+          {isVideoPost ? (
+            <Video
+              source={{ uri: getPlayableVideoUrl(job._id) }}
+              style={styles.coverImage}
+              useNativeControls
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={false}
+            />
+          ) : coverImage ? (
             <Image source={{ uri: coverImage }} style={styles.coverImage} resizeMode="cover" />
           ) : (
             <LinearGradient
@@ -329,20 +414,46 @@ export default function DetailScreen() {
             </TouchableOpacity>
 
             {isAuthor ? (
-              <View style={styles.circleBtnPlaceholder} />
+              canShowFeature ? (
+                <TouchableOpacity
+                  style={styles.headerFeatureBtn}
+                  onPress={() => setShowFeatureConfirm(true)}
+                  disabled={featuring}
+                >
+                  {featuring ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="star" size={14} color="#fff" />
+                      <Text style={styles.headerFeatureBtnText}>Feature</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.circleBtnPlaceholder} />
+              )
             ) : (
-              <TouchableOpacity
-                style={styles.circleBtn}
-                onPress={handleToggleSave}
-                disabled={saving}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                  size={24}
-                  color={isSaved ? '#FF9500' : '#000'}
-                />
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                <View style={styles.circleBtn}>
+                  <ReportOptionsMenu
+                    onReport={handleReportPress}
+                    iconColor="#000"
+                    reportLabel="Report"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.circleBtn}
+                  onPress={handleToggleSave}
+                  disabled={saving}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                    size={24}
+                    color={isSaved ? '#FF9500' : '#000'}
+                  />
+                </TouchableOpacity>
+              </View>
             )}
           </SafeAreaView>
         </View>
@@ -430,19 +541,18 @@ export default function DetailScreen() {
         {isAuthor ? (
           <>
             <TouchableOpacity
-              style={styles.deleteBtn}
+              style={[styles.deleteBtn, deleting && { opacity: 0.7 }]}
               onPress={handleDelete}
+              disabled={deleting}
             >
-              <Ionicons name="trash-outline" size={20} color="#ffffffff" />
-              <Text style={styles.deleteBtnText}>Delete Ad</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.editJobBtn}
-              onPress={() => router.push(`/edit-job/${id}` as any)}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" />
-              <Text style={styles.editJobBtnText}>Edit Ad</Text>
+              {deleting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={20} color="#fff" />
+                  <Text style={styles.deleteBtnText}>Delete Ad</Text>
+                </>
+              )}
             </TouchableOpacity>
           </>
         ) : (
@@ -487,6 +597,91 @@ export default function DetailScreen() {
           </>
         )}
       </View>
+
+      <Modal
+        visible={showDeleteConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setShowDeleteConfirm(false)}
+      >
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteSheet}>
+            <Text style={styles.deleteTitle}>Delete this ad?</Text>
+            <Text style={styles.deleteMessage}>
+              This cannot be undone. The post will be removed from My Ads and the feed.
+            </Text>
+            <View style={styles.deleteActions}>
+              <TouchableOpacity
+                style={styles.deleteCancelBtn}
+                onPress={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+              >
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.deleteConfirmText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showFeatureConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !featuring && setShowFeatureConfirm(false)}
+      >
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteSheet}>
+            <Text style={styles.deleteTitle}>Feature this post?</Text>
+            <Text style={styles.deleteMessage}>
+              {quota?.canFeatureFree
+                ? 'This post will be featured for 30 days using your included featured slot.'
+                : 'Professional tools are not active. Paid featuring is unavailable in the app right now.'}
+            </Text>
+            <View style={styles.deleteActions}>
+              <TouchableOpacity
+                style={styles.deleteCancelBtn}
+                onPress={() => setShowFeatureConfirm(false)}
+                disabled={featuring}
+              >
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.featureConfirmBtn}
+                onPress={confirmFeature}
+                disabled={featuring}
+              >
+                {featuring ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.deleteConfirmText}>
+                    {quota?.canFeatureFree ? 'Feature' : 'OK'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Report post"
+        subtitle="Tell us why you are reporting this post. Our team will review it."
+        submitting={submittingReport}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={handleSubmitReport}
+      />
     </View>
   );
 }
@@ -503,6 +698,9 @@ const styles = StyleSheet.create({
     height: 200,
     width: '100%',
     position: 'relative',
+  },
+  videoHeaderContainer: {
+    height: 280,
   },
   gradient: {
     flex: 1,
@@ -530,9 +728,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   circleBtnPlaceholder: {
     width: 45,
     height: 45,
+  },
+  headerFeatureBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 20,
+  },
+  headerFeatureBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  featureConfirmBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#FF9500',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     padding: 20,
@@ -792,28 +1017,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#fb2e2eff',
   },
   deleteBtnText: {
-    color: '#ffffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  editJobBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: 15,
-    backgroundColor: '#FF9500',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-    shadowColor: '#FF9500',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  editJobBtnText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  deleteSheet: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+  },
+  deleteTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  deleteMessage: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    marginBottom: 18,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  deleteCancelBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

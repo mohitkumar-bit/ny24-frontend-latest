@@ -7,9 +7,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { workerService } from '@/services/worker.service';
 import { authService } from '@/services/auth.service';
 import { checkChatLimit } from '@/services/chat.service';
+import {
+  confirmBlockUser,
+  refreshBlockStatus,
+  unblockUserWithAlert,
+} from '@/utils/userBlockAction';
 import { callRequestService } from '@/services/callRequest.service';
 import { Skeleton } from '@/components/Skeleton';
 import { LimitModal } from '@/components/LimitModal';
+import { ReportModal } from '@/components/ReportModal';
+import { ReportOptionsMenu } from '@/components/ReportOptionsMenu';
+import { reportWorkerProfile } from '@/services/report.service';
 
 export default function WorkerDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -19,6 +27,9 @@ export default function WorkerDetailsScreen() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [requestingCall, setRequestingCall] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -121,6 +132,66 @@ export default function WorkerDetailsScreen() {
     }
   };
 
+  const currentUserId = currentUser?.id || (currentUser as any)?._id;
+  const isOwnProfile =
+    !!currentUserId &&
+    !!worker?.user?._id &&
+    String(currentUserId) === String(worker.user._id);
+
+  const handleReportPress = () => {
+    if (!currentUser) {
+      router.push('/auth/login' as any);
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const handleBlockPress = async () => {
+    const targetUserId = worker?.user?._id;
+    if (!targetUserId) return;
+
+    if (!currentUser) {
+      router.push('/auth/login' as any);
+      return;
+    }
+
+    if (blockedByMe) {
+      await unblockUserWithAlert(targetUserId, () => setBlockedByMe(false));
+      return;
+    }
+
+    confirmBlockUser(targetUserId, worker?.user?.name || 'This user', () =>
+      setBlockedByMe(true)
+    );
+  };
+
+  const handleMenuOpen = async () => {
+    const targetUserId = worker?.user?._id;
+    if (!targetUserId || !currentUser) return;
+    try {
+      setBlockedByMe(await refreshBlockStatus(targetUserId));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSubmitReport = async (reason: string, details: string) => {
+    if (!id) return;
+    setSubmittingReport(true);
+    try {
+      await reportWorkerProfile(id as string, { reason, details });
+      setShowReportModal(false);
+      Alert.alert(
+        'Report submitted',
+        'Thank you. Our team will review this report and take action if needed.'
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Could not submit report');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   const processLimitError = (error: any) => {
     console.log('Processing worker limit error:', error);
     const isLimitReached = (error.code === 'CHAT_LIMIT_REACHED') || 
@@ -161,11 +232,8 @@ export default function WorkerDetailsScreen() {
       <LimitModal 
         visible={showLimitModal}
         onClose={() => setShowLimitModal(false)}
-        onUpgrade={() => {
-          setShowLimitModal(false);
-          router.push('/subscription');
-        }}
-        message={modalMessage}
+        title="Chat slots are full"
+        message="Chat slots are full. Try after 24 hours."
         plan={modalPlan}
       />
       <LinearGradient
@@ -180,7 +248,19 @@ export default function WorkerDetailsScreen() {
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Professional Profile</Text>
-          <View style={{ width: 40 }} />
+          {!isOwnProfile && worker ? (
+            <ReportOptionsMenu
+              onReport={handleReportPress}
+              onBlock={handleBlockPress}
+              onMenuOpen={handleMenuOpen}
+              blockedByMe={blockedByMe}
+              buttonStyle={styles.reportHeaderBtn}
+              iconColor="#64748B"
+              reportLabel="Report"
+            />
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
 
         <ScrollView
@@ -370,6 +450,15 @@ export default function WorkerDetailsScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      <ReportModal
+        visible={showReportModal}
+        title="Report worker profile"
+        subtitle="Tell us why you are reporting this profile. Our team will review it."
+        submitting={submittingReport}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={handleSubmitReport}
+      />
     </View>
   );
 }
@@ -392,6 +481,12 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     padding: 5,
+  },
+  reportHeaderBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

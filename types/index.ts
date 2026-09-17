@@ -1,1 +1,7 @@
-export type { User, LoginCredentials, SignUpCredentials } from './user';
+export type {
+  User,
+  LoginCredentials,
+  SignUpCredentials,
+  SendOtpPayload,
+  VerifyOtpPayload,
+} from './user';

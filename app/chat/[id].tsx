@@ -15,13 +15,15 @@ import {
   ScrollView,
   Keyboard,
   Image,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+import { KeyboardStickyView } from '@/utils/keyboardController';
+import { ReportModal } from '@/components/ReportModal';
+import { formatMessageTime } from '@/utils/formatTime';
+import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { Audio } from 'expo-av';
 import {
   useAudioRecorder,
@@ -44,6 +46,7 @@ import { callRequestService } from '../../services/callRequest.service';
 import { authService } from '../../services/auth.service';
 import { ChatEmojiPicker } from '@/components/ChatEmojiPicker';
 import { setActiveConversationId as setGlobalActiveConversationId } from '@/utils/activeChat';
+import { preventAndroidTextClip } from '@/utils/androidTextFix';
 
 interface Message {
   _id: string;
@@ -142,7 +145,6 @@ export default function ChatDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -164,8 +166,6 @@ export default function ChatDetailScreen() {
   const [blockMessage, setBlockMessage] = useState('');
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportReason, setReportReason] = useState('Harassment');
-  const [reportDetails, setReportDetails] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -174,74 +174,26 @@ export default function ChatDetailScreen() {
   const [voiceNotice, setVoiceNotice] = useState<{ title: string; message: string } | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Same keyboard docking as client chat (absolute input + keyboardOffset lift)
-  useEffect(() => {
-    const applyKeyboardHeight = (keyboardY: number, keyboardHeight: number) => {
-      const windowH = Dimensions.get('window').height;
-      const fromScreen =
-        keyboardY > 0 ? Math.max(0, windowH - keyboardY) : keyboardHeight;
-      const lift = Math.max(fromScreen, keyboardHeight, 0);
-      setKeyboardOffset(lift);
-    };
-
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const onShow = Keyboard.addListener(showEvent, (e) => {
-      applyKeyboardHeight(e.endCoordinates.screenY, e.endCoordinates.height);
-    });
-    const onHide = Keyboard.addListener(hideEvent, () => {
-      setKeyboardOffset(0);
-    });
-
-    let removeWeb: (() => void) | undefined;
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const vv = window.visualViewport;
-      const syncWeb = () => {
-        if (!vv) {
-          setKeyboardOffset(0);
-          return;
-        }
-        const lift = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-        setKeyboardOffset(lift > 80 ? lift : 0);
-      };
-      vv?.addEventListener('resize', syncWeb);
-      vv?.addEventListener('scroll', syncWeb);
-      window.addEventListener('resize', syncWeb);
-      removeWeb = () => {
-        vv?.removeEventListener('resize', syncWeb);
-        vv?.removeEventListener('scroll', syncWeb);
-        window.removeEventListener('resize', syncWeb);
-      };
-    }
-
-    return () => {
-      onShow.remove();
-      onHide.remove();
-      removeWeb?.();
-    };
-  }, []);
   const webMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const webStreamRef = useRef<MediaStream | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   useAudioRecorderState(audioRecorder);
-
-  const REPORT_REASONS = [
-    'Harassment',
-    'Spam',
-    'Scam or fraud',
-    'Inappropriate content',
-    'Other',
-  ];
+  const scrollToLatest = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated });
+    });
+  }, []);
 
   useEffect(() => {
-    if (id && id !== 'new') {
-      setActiveConversationId(id as string);
-    }
     if (paramReceiverId) {
       setReceiverId(paramReceiverId as string);
+    } else if (id && id !== 'new') {
+      setReceiverId(id as string);
+    }
+
+    if (id && id !== 'new' && id !== paramReceiverId) {
+      setActiveConversationId(id as string);
     }
   }, [id, paramReceiverId]);
 
@@ -253,6 +205,7 @@ export default function ChatDetailScreen() {
 
       return () => {
         setGlobalActiveConversationId(null);
+        Keyboard.dismiss();
       };
     }, [activeConversationId, id])
   );
@@ -313,28 +266,33 @@ export default function ChatDetailScreen() {
     try {
       setIsClaimingSlot(true);
       const user = await authService.getProfile();
+      const subscribed = user?.subscription?.status === 'active';
+
       if (user) {
         const userId = user._id || user.id;
         setCurrentUserId(userId);
-        const subscribed = user.subscription?.status === 'active';
-        setIsSubscribed(subscribed);
-
-        if (subscribed) {
-          setIsClaimingSlot(false);
-          setIsLoading(false);
-          fetchMsgs();
-          return;
-        }
+        setIsSubscribed(!!subscribed);
       }
 
       const claimParams: { conversationId?: string; receiverId?: string } = {};
-      if (id && id !== 'new') {
+      if (id && id !== 'new' && id !== paramReceiverId) {
         claimParams.conversationId = id as string;
       }
       if (paramReceiverId) {
         claimParams.receiverId = paramReceiverId as string;
       } else if (id && id !== 'new') {
         claimParams.receiverId = id as string;
+      }
+
+      if (subscribed) {
+        const slotData = await claimChatSlot(claimParams);
+        if (slotData.conversationId) {
+          setActiveConversationId(slotData.conversationId);
+        }
+        setIsClaimingSlot(false);
+        setIsLoading(false);
+        await fetchMsgs(slotData.conversationId);
+        return;
       }
 
       const slotData = await claimChatSlot(claimParams);
@@ -350,7 +308,7 @@ export default function ChatDetailScreen() {
       }
 
       setIsClaimingSlot(false);
-      fetchMsgs();
+      await fetchMsgs(slotData.conversationId);
     } catch (error: unknown) {
       setIsClaimingSlot(false);
       setIsLoading(false);
@@ -367,11 +325,11 @@ export default function ChatDetailScreen() {
       if (code === 'CHAT_LIMIT_REACHED') {
         setSlotBlocked(true);
         Alert.alert(
-          'All Chat Slots Full',
-          msg,
+          'Chat slots are full',
+          'Chat slots are full. Try after 24 hours.',
           [
             { text: 'Go Back', onPress: () => router.back() },
-            { text: 'Upgrade', onPress: () => router.push('/subscription' as any) },
+            { text: 'OK' },
           ]
         );
       } else if (code === 'USER_BLOCKED') {
@@ -384,8 +342,11 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const fetchMsgs = async () => {
-    const fetchId = activeConversationId || (id === 'new' ? receiverId : id);
+  const fetchMsgs = async (conversationIdOverride?: string) => {
+    const fetchId =
+      conversationIdOverride ||
+      activeConversationId ||
+      (id === 'new' ? receiverId : id);
 
     if (!fetchId) {
       setIsLoading(false);
@@ -394,7 +355,7 @@ export default function ChatDetailScreen() {
 
     try {
       const data = await getMessages(fetchId as string);
-      setMessages(data);
+      setMessages(Array.isArray(data) ? data : []);
 
       if (!receiverId && data.length > 0 && currentUserId) {
         const firstMsg = data[0];
@@ -419,10 +380,10 @@ export default function ChatDetailScreen() {
       'Chat Slot Timer',
       isPinned
         ? 'This chat is pinned and keeps its slot until you unpin it.'
-        : `This chat uses one of your 3 free slots for 24 hours from when you opened it.\n\nTime remaining: ${timeLeft}\n\nPin the chat to keep the slot after 24 hours, or upgrade for more slots.`,
+        : `This chat uses one of your 3 free slots for 24 hours from when you opened it.\n\nTime remaining: ${timeLeft}\n\nPin the chat to keep the slot after 24 hours.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/subscription' as any) },
+        { text: 'OK' },
       ]
     );
   };
@@ -442,10 +403,14 @@ export default function ChatDetailScreen() {
         [{ text: 'OK', onPress: () => router.replace('/auth/login' as any) }]
       );
     } else if (errorCode === 'CHAT_LIMIT_REACHED') {
-      Alert.alert('All Chat Slots Full', serverMsg || 'Wait for a slot to expire or upgrade.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/subscription' as any) },
-      ]);
+      Alert.alert(
+        'Chat slots are full',
+        'Chat slots are full. Try after 24 hours.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'OK' },
+        ]
+      );
     } else if (errorCode === 'USER_BLOCKED') {
       setIsChatBlocked(true);
       setBlockedByMe(!!serverError?.blockedByMe);
@@ -489,6 +454,7 @@ export default function ChatDetailScreen() {
       });
 
       applySendResponse(response);
+      scrollToLatest();
     } catch (error: any) {
       handleSendError(error);
     } finally {
@@ -521,6 +487,7 @@ export default function ChatDetailScreen() {
       });
 
       applySendResponse(response);
+      scrollToLatest();
     } catch (error: any) {
       handleSendError(error);
     } finally {
@@ -533,33 +500,13 @@ export default function ChatDetailScreen() {
     setShowEmojiPicker(false);
     if (slotBlocked || isChatBlocked || isSending) return;
 
-    const permission = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const uri = useCamera
+      ? await pickImageFromCamera({ allowsEditing: false, quality: 0.8 })
+      : await pickImageFromLibrary({ allowsEditing: false, quality: 0.8 });
 
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow access to send photos.');
-      return;
-    }
+    if (!uri) return;
 
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-        });
-
-    if (result.canceled || !result.assets[0]?.uri) return;
-
-    const asset = result.assets[0];
-    await sendMediaMessage(
-      asset.uri,
-      asset.mimeType || 'image/jpeg',
-      `chat-${Date.now()}.jpg`
-    );
+    await sendMediaMessage(uri, 'image/jpeg', `chat-${Date.now()}.jpg`);
   };
 
   const toggleEmojiPicker = () => {
@@ -599,7 +546,10 @@ export default function ChatDetailScreen() {
 
     if (slotBlocked || isChatBlocked || isSending) {
       if (slotBlocked) {
-        showVoiceNotice('Chat unavailable', 'No free chat slots. Upgrade or wait for a slot to open.');
+        showVoiceNotice(
+          'Chat slots are full',
+          'Chat slots are full. Try after 24 hours.'
+        );
       } else if (isChatBlocked) {
         showVoiceNotice('Messaging blocked', blockMessage || 'You cannot message this user.');
       }
@@ -822,18 +772,17 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const handleSubmitReport = async () => {
-    if (!receiverId || !reportReason.trim()) return;
+  const handleSubmitReport = async (reason: string, details: string) => {
+    if (!receiverId || !reason.trim()) return;
     setSubmittingReport(true);
     try {
       await reportUser({
         reportedUserId: receiverId as string,
         conversationId: activeConversationId || undefined,
-        reason: reportReason,
-        details: reportDetails.trim(),
+        reason,
+        details,
       });
       setShowReportModal(false);
-      setReportDetails('');
       setShowChatMenu(false);
       Alert.alert(
         'Report submitted',
@@ -848,8 +797,7 @@ export default function ChatDetailScreen() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = String(item.sender) === String(currentUserId);
-    const date = new Date(item.createdAt);
-    const timeText = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeText = formatMessageTime(item.createdAt);
 
     if (item.messageType === 'call_request') {
       if (isMe) {
@@ -865,7 +813,13 @@ export default function ChatDetailScreen() {
               <Text style={[styles.callRequestSub, styles.meTimeText]}>
                 Waiting for them to call you back
               </Text>
-              <Text style={[styles.timeText, styles.meTimeText]}>{timeText}</Text>
+              <Text
+                style={[styles.timeText, styles.meTimeText]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
+                {timeText}
+              </Text>
             </View>
           </View>
         );
@@ -910,7 +864,13 @@ export default function ChatDetailScreen() {
             ) : (
               <Text style={styles.callRequestStatusText}>{item.text}</Text>
             )}
-            <Text style={[styles.timeText, styles.otherTimeText]}>{timeText}</Text>
+            <Text
+              style={[styles.timeText, styles.otherTimeText]}
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
+              {timeText}
+            </Text>
           </View>
         </View>
       );
@@ -931,7 +891,11 @@ export default function ChatDetailScreen() {
                 {item.text}
               </Text>
             ) : null}
-            <Text style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}>
+            <Text
+              style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
               {timeText}
             </Text>
           </View>
@@ -949,7 +913,11 @@ export default function ChatDetailScreen() {
                 {item.text}
               </Text>
             ) : null}
-            <Text style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}>
+            <Text
+              style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
               {timeText}
             </Text>
           </View>
@@ -965,7 +933,11 @@ export default function ChatDetailScreen() {
               {item.text}
             </Text>
             <View style={styles.messageFooter}>
-              <Text style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText]}>
+              <Text
+                style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
                 {timeText}
               </Text>
             </View>
@@ -978,20 +950,10 @@ export default function ChatDetailScreen() {
   const showSlotTimer =
     !isSubscribed && !slotBlocked && (!!expiresAt || isPinned);
 
-  // Newest first for inverted FlatList (WhatsApp-style: latest at bottom)
-  const listMessages = useMemo(() => [...messages].reverse(), [messages]);
-  const listBottomPad =
-    72 + (keyboardOffset > 0 ? keyboardOffset : insets.bottom);
-  const listTopPad = showSlotTimer ? 40 : 4;
-
-  if (isClaimingSlot) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#FF9500" />
-        <Text style={{ marginTop: 12, color: '#64748B' }}>Opening chat...</Text>
-      </View>
-    );
-  }
+  const invertedMessages = useMemo(
+    () => (Array.isArray(messages) ? [...messages] : []).reverse(),
+    [messages]
+  );
 
   return (
     <View style={styles.container}>
@@ -1002,7 +964,13 @@ export default function ChatDetailScreen() {
       />
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            Keyboard.dismiss();
+            router.back();
+          }}
+          style={styles.headerBtn}
+        >
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
 
@@ -1089,47 +1057,38 @@ export default function ChatDetailScreen() {
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ActivityIndicator size="large" color="#FF9500" />
           </View>
+        ) : messages.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
+              Say hello to start the conversation and please don&apos;t share any confidential data
+            </Text>
+          </View>
         ) : (
           <FlatList
             ref={flatListRef}
-            style={styles.messageList}
-            data={listMessages}
             inverted
-            extraData={currentUserId}
+            data={invertedMessages}
             keyExtractor={(item) => item._id}
-            renderItem={renderMessage}
+            style={styles.messagesFlex}
             contentContainerStyle={[
-              styles.listContent,
-              {
-                // inverted: paddingTop sits next to the input (visual bottom)
-                paddingTop: listBottomPad,
-                paddingBottom: listTopPad,
-              },
+              styles.messagesList,
+              showSlotTimer ? { paddingBottom: 40 } : null,
             ]}
-            ListEmptyComponent={() => (
-              <View style={[styles.dateContainer, styles.invertedEmpty]}>
-                <View style={styles.dateBadge}>
-                  <Text style={styles.dateText}>Say hello to start the conversation</Text>
-                </View>
-              </View>
-            )}
+            extraData={currentUserId}
+            renderItem={renderMessage}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 80,
+            }}
           />
         )}
+      </View>
 
-        <View
-          style={[
-            styles.inputBar,
-            styles.inputBarDocked,
-            {
-              bottom: keyboardOffset > 0 ? keyboardOffset : 0,
-              paddingBottom:
-                keyboardOffset > 0 ? 10 : 10 + insets.bottom,
-            },
-          ]}
-        >
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           {showEmojiPicker && !isRecording && (
             <View style={styles.emojiDock}>
               <ChatEmojiPicker onSelect={handleSelectEmoji} />
@@ -1180,6 +1139,7 @@ export default function ChatDetailScreen() {
                 editable={!slotBlocked && !isChatBlocked}
                 onFocus={() => {
                   setShowEmojiPicker(false);
+                  scrollToLatest();
                 }}
               />
 
@@ -1230,7 +1190,14 @@ export default function ChatDetailScreen() {
             </>
           )}
         </View>
-      </View>
+      </KeyboardStickyView>
+
+      {isClaimingSlot ? (
+        <View style={styles.claimingOverlay}>
+          <ActivityIndicator size="large" color="#FF9500" />
+          <Text style={styles.claimingText}>Opening chat...</Text>
+        </View>
+      ) : null}
 
       <Modal visible={showAttachMenu} transparent animationType="fade">
         <TouchableOpacity
@@ -1307,65 +1274,14 @@ export default function ChatDetailScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showReportModal} transparent animationType="slide">
-        <View style={styles.reportOverlay}>
-          <View style={[styles.reportSheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <Text style={styles.reportTitle}>Report user</Text>
-            <Text style={styles.reportSubtitle}>
-              Tell us what happened. An admin will review and decide if action is needed.
-            </Text>
-            <ScrollView style={{ maxHeight: 280 }}>
-              {REPORT_REASONS.map((reason) => (
-                <TouchableOpacity
-                  key={reason}
-                  style={[
-                    styles.reasonOption,
-                    reportReason === reason && styles.reasonOptionActive,
-                  ]}
-                  onPress={() => setReportReason(reason)}
-                >
-                  <Text
-                    style={[
-                      styles.reasonOptionText,
-                      reportReason === reason && styles.reasonOptionTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <TextInput
-                style={styles.reportDetailsInput}
-                placeholder="Additional details (optional)"
-                placeholderTextColor="#94A3B8"
-                value={reportDetails}
-                onChangeText={setReportDetails}
-                multiline
-                numberOfLines={4}
-              />
-            </ScrollView>
-            <View style={styles.reportActions}>
-              <TouchableOpacity
-                style={styles.reportCancelBtn}
-                onPress={() => setShowReportModal(false)}
-              >
-                <Text style={styles.reportCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.reportSubmitBtn}
-                onPress={handleSubmitReport}
-                disabled={submittingReport}
-              >
-                {submittingReport ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.reportSubmitText}>Submit report</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ReportModal
+        visible={showReportModal}
+        title="Report user"
+        subtitle="Tell us what happened. An admin will review and decide if action is needed."
+        submitting={submittingReport}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={handleSubmitReport}
+      />
 
       <Modal
         visible={!!previewImageUrl}
@@ -1489,15 +1405,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: 12,
     paddingTop: 10,
+    paddingBottom: 10,
     backgroundColor: '#fff',
-  },
-  inputBarDocked: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 20,
-    elevation: 12,
+    gap: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#d1d5db',
   },
@@ -1543,19 +1453,43 @@ const styles = StyleSheet.create({
   actionBtn: {
     padding: 8,
   },
-  keyboardView: {
-    flex: 1,
-    position: 'relative',
+  keyboardView: { flex: 1 },
+  claimingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(248, 249, 250, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
   },
-  messageList: {
-    flex: 1,
+  claimingText: {
+    marginTop: 12,
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '500',
   },
-  listContent: {
+  messagesFlex: { flex: 1 },
+  messagesList: {
     paddingHorizontal: 20,
+    paddingVertical: 16,
     flexGrow: 1,
   },
-  invertedEmpty: {
-    transform: [{ scaleY: -1 }],
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    paddingHorizontal: 28,
+    paddingVertical: 20,
+  },
+  emptyText: {
+    width: '100%',
+    maxWidth: '100%',
+    alignSelf: 'center',
+    fontSize: 15,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
+    ...preventAndroidTextClip({ paddingEnd: 6 }),
   },
   bottomBar: {
     backgroundColor: '#fff',
@@ -1595,9 +1529,11 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   bubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
+    paddingRight: 16,
     borderRadius: 20,
+    overflow: 'visible',
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1626,10 +1562,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
     marginTop: 6,
+    minWidth: 72,
+    paddingRight: 2,
   },
   timeText: {
     fontSize: 11,
+    lineHeight: 14,
+    flexShrink: 0,
+    includeFontPadding: false,
+    textAlign: 'right',
   },
   meTimeText: {
     color: 'rgba(255,255,255,0.7)',
@@ -1936,7 +1879,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#2762ea',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
   },
   sendBtnActive: {
     backgroundColor: '#2762ea',
@@ -1998,93 +1940,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748B',
     fontWeight: '600',
-  },
-  reportOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  reportSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 6,
-  },
-  reportSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  reasonOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
-  },
-  reasonOptionActive: {
-    borderColor: '#FF9500',
-    backgroundColor: '#FFF8EE',
-  },
-  reasonOptionText: {
-    fontSize: 15,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  reasonOptionTextActive: {
-    color: '#FF9500',
-    fontWeight: '700',
-  },
-  reportDetailsInput: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 90,
-    textAlignVertical: 'top',
-    fontSize: 15,
-    color: '#0F172A',
-    marginTop: 4,
-  },
-  reportActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  reportCancelBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reportCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  reportSubmitBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#FF9500',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reportSubmitText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
   },
 });

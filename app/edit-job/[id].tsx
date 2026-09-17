@@ -20,6 +20,10 @@ import { jobService } from '@/services/job.service';
 import { categoryService, Category } from '@/services/category.service';
 import { CustomInput } from '@/components/CustomInput';
 import { AGE_MAX_DIGITS, AGE_MIN, commitAgeInput, finalizeAge, sanitizeAgeInput } from '@/utils/ageInput';
+import {
+  preventAndroidChipTextClip,
+  preventAndroidListItemTextClip,
+} from '@/utils/androidTextFix';
 
 export default function EditJobScreen() {
   const router = useRouter();
@@ -165,7 +169,7 @@ export default function EditJobScreen() {
                 style={[styles.reqChip, genderRequirement === g && styles.reqChipActive]}
                 onPress={() => setGenderRequirement(g)}
               >
-                <Text style={[styles.reqChipText, genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
+                <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -308,7 +312,7 @@ export default function EditJobScreen() {
                     <View style={styles.categoryIconContainer}>
                       <Ionicons name={item.icon as any} size={20} color="#FF9500" />
                     </View>
-                    <Text style={styles.categoryItemText}>{item.name}</Text>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={24} color="#00A300" />
                     )}
@@ -513,7 +517,6 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   categoryItemText: {
-    flex: 1,
     fontSize: 16,
     color: '#333',
   },

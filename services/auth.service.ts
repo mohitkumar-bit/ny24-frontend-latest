@@ -4,7 +4,7 @@ import { buildProfileImageFormData } from './formDataUpload';
 import { forceLogout } from './authSession';
 import { tokenStorage } from './tokenStorage';
 import { registerAndSyncPushToken } from './pushRegistration';
-import type { LoginCredentials, SignUpCredentials } from '@/types';
+import type { LoginCredentials, SignUpCredentials, SendOtpPayload, VerifyOtpPayload } from '@/types';
 
 export const authService = {
   async login(credentials: LoginCredentials) {
@@ -21,6 +21,39 @@ export const authService = {
 
   async signUp(credentials: SignUpCredentials) {
     const response = await api.post('/auth/register', credentials);
+
+    const { accessToken, refreshToken, user } = response.data;
+
+    await tokenStorage.setTokens(accessToken, refreshToken);
+
+    registerAndSyncPushToken().catch(() => {});
+
+    return user;
+  },
+
+  async sendOtp(payload: SendOtpPayload) {
+    const response = await api.post('/auth/otp/send', payload);
+    const data = response.data as {
+      message: string;
+      phone: string;
+      expiresIn?: number;
+      dummyOtp?: string;
+      bypassOtp?: boolean;
+      user?: any;
+      accessToken?: string;
+      refreshToken?: string;
+    };
+
+    if (data.bypassOtp && data.accessToken && data.refreshToken) {
+      await tokenStorage.setTokens(data.accessToken, data.refreshToken);
+      registerAndSyncPushToken().catch(() => {});
+    }
+
+    return data;
+  },
+
+  async verifyOtp(payload: VerifyOtpPayload) {
+    const response = await api.post('/auth/otp/verify', payload);
 
     const { accessToken, refreshToken, user } = response.data;
 

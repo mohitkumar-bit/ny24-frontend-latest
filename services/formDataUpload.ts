@@ -55,6 +55,33 @@ export async function buildChatMediaFormData(
   return formData;
 }
 
+export async function appendVideoToFormData(
+  formData: FormData,
+  field: string,
+  uri: string,
+  filename: string,
+  mimeType = 'video/mp4',
+  durationSeconds?: number | null
+) {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const type =
+      blob.type && blob.type !== 'application/octet-stream' ? blob.type : mimeType;
+    formData.append(field, new File([blob], filename, { type }));
+  } else {
+    formData.append(field, {
+      uri,
+      type: mimeType,
+      name: filename,
+    } as any);
+  }
+
+  if (durationSeconds != null && Number.isFinite(durationSeconds) && durationSeconds > 0) {
+    formData.append('durationSeconds', String(Math.ceil(durationSeconds)));
+  }
+}
+
 export async function buildProfileImageFormData(uri: string) {
   const formData = new FormData();
   await appendImageToFormData(formData, 'image', uri, 'profile.jpg');

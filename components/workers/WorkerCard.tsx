@@ -22,6 +22,13 @@ interface WorkerCardProps {
 
 export const WorkerCard = ({ worker }: WorkerCardProps) => {
   const router = useRouter();
+  const userName = worker.user?.name?.trim() || 'Worker';
+  const skills = Array.isArray(worker.skills) ? worker.skills : [];
+  const locationLabel = worker.location?.address || worker.location?.city || 'Location unavailable';
+
+  if (!worker?._id || !worker.user?._id) {
+    return null;
+  }
 
   return (
     <TouchableOpacity
@@ -37,7 +44,7 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
           {worker.user.profilePicture ? (
             <Image source={{ uri: worker.user.profilePicture }} style={styles.avatarImage} />
           ) : (
-            <Text style={styles.avatarText}>{worker.user.name[0]}</Text>
+            <Text style={styles.avatarText}>{userName[0]}</Text>
           )}
           <View style={[
             styles.statusDot,
@@ -47,8 +54,8 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
 
         <View style={styles.infoSection}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>{worker.user.name}</Text>
-            {worker.user.isVerified ? (
+            <Text style={styles.name} numberOfLines={1}>{userName}</Text>
+            {worker.user?.isVerified ? (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={12} color="#fff" />
                 <Text style={styles.verifiedText}>Verified</Text>
@@ -57,7 +64,7 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
           </View>
           
           <Text style={styles.title} numberOfLines={1}>
-            {worker.skills.map(s => s.name).join(', ') || 'Professional'}
+            {skills.map((s) => s.name).join(', ') || worker.title || 'Professional'}
           </Text>
         </View>
 
@@ -71,7 +78,7 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
           <View style={styles.locationRow}>
             <Ionicons name="location-sharp" size={14} color="#666" />
             <Text style={styles.locationText} numberOfLines={1}>
-              {worker.location.address || worker.location.city}
+              {locationLabel}
             </Text>
             {worker.distanceKm != null && (
               <Text style={styles.distanceText}> · {worker.distanceKm} km</Text>

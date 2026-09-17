@@ -1,6 +1,4 @@
-import { Platform } from 'react-native';
-import { api, postMultipart } from './api';
-import { appendImageToFormData } from './formDataUpload';
+import { api } from './api';
 
 export type VerificationStatus = 'none' | 'pending' | 'approved' | 'rejected';
 
@@ -14,18 +12,6 @@ export interface VerificationInfo {
   hoursUntilReview?: number;
   canSubmit?: boolean;
   eligible?: boolean;
-}
-
-async function buildVerificationFormData(
-  selfieUri: string,
-  aadhaarUri: string,
-  panUri: string
-) {
-  const formData = new FormData();
-  await appendImageToFormData(formData, 'selfie', selfieUri, 'selfie.jpg');
-  await appendImageToFormData(formData, 'aadhaar', aadhaarUri, 'aadhaar.jpg');
-  await appendImageToFormData(formData, 'pan', panUri, 'pan.jpg');
-  return formData;
 }
 
 export const verificationService = {
@@ -43,17 +29,22 @@ export const verificationService = {
     };
   },
 
-  async submitDocuments(selfieUri: string, aadhaarUri: string, panUri: string) {
-    // Native: use fetch multipart (axios FormData often drops files on Android/iOS).
-    if (Platform.OS !== 'web') {
-      return postMultipart('/verification/submit', () =>
-        buildVerificationFormData(selfieUri, aadhaarUri, panUri)
-      );
-    }
+  async sendAadhaarOtp(aadhaarNumber: string) {
+    const response = await api.post('/verification/aadhaar/send-otp', {
+      aadhaar_number: aadhaarNumber,
+    });
+    return response.data as {
+      success: boolean;
+      message: string;
+      maskedAadhaar?: string;
+      expiresAt?: string;
+    };
+  },
 
-    const formData = await buildVerificationFormData(selfieUri, aadhaarUri, panUri);
-    const response = await api.post('/verification/submit', formData, {
-      timeout: 120000,
+  async verifyAadhaarAndSubmit(aadhaarNumber: string, otp: string) {
+    const response = await api.post('/verification/aadhaar/verify', {
+      aadhaar_number: aadhaarNumber,
+      otp,
     });
     return response.data;
   },

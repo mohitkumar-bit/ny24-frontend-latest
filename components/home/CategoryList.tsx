@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { categoryService, Category } from '@/services/category.service';
 import { tokenStorage } from '@/services/tokenStorage';
 import { Skeleton } from '@/components/Skeleton';
+import { preventAndroidChipTextClip } from '@/utils/androidTextFix';
 
 interface CategoryListProps {
   onSelectCategory: (id: string) => void;
@@ -69,6 +70,7 @@ export const CategoryList = ({ onSelectCategory, activeCategoryId }: CategoryLis
           />
           <Text style={[
             styles.chipText,
+            preventAndroidChipTextClip(),
             activeCategoryId === item._id && styles.activeChipText
           ]}>
             {item.name}

@@ -73,10 +73,7 @@ export default function SupportScreen() {
               question="How do I post a job?"
               answer="Tap the '+' floating button on the home screen to start creating your job post."
             />
-            <FAQItem
-              question="Is it free to use?"
-              answer="gigSEVA is free for basic use. Premium subscriptions are available for enhanced visibility."
-            />
+           
             <FAQItem
               question="How do I contact a worker?"
               answer="View the job details and use the 'Chat' or 'Call' buttons to connect directly."

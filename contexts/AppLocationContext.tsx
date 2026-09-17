@@ -121,9 +121,10 @@ export function AppLocationProvider({ children }: { children: React.ReactNode })
       try {
         const profile = await authService.getProfile();
         const fromUser = fromProfile(profile);
-        if (fromUser) {
+        if (fromUser?.city?.trim()) {
           setLocationState(fromUser);
           await locationStorage.set(fromUser);
+          await locationStorage.markSetupComplete();
           return;
         }
       } catch {

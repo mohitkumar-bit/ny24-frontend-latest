@@ -3,8 +3,13 @@ import { Platform } from 'react-native';
 import { tokenStorage } from './tokenStorage';
 import { forceLogout, shouldSkipTokenRefresh } from './authSession';
 
-export const BASE_URL = 'https://api.gigseva.com/api';
-// export const BASE_URL = ' http://localhost:4000/api';
+export const BASE_URL = __DEV__
+  ? 'http://localhost:4000/api'
+  : 'https://api.gigseva.com/api';
+
+export function getPlayableVideoUrl(jobId: string) {
+  return `${BASE_URL}/job/${jobId}/video-stream`;
+}
 
 export const api = axios.create({
   baseURL: BASE_URL,

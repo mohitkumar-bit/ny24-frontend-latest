@@ -17,7 +17,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { CustomInput } from '@/components/CustomInput';
 import { CustomButton } from '@/components/CustomButton';
 import { jobService } from '@/services/job.service';
@@ -25,10 +25,26 @@ import { categoryService, Category } from '@/services/category.service';
 import { useAppLocation } from '@/contexts/AppLocationContext';
 import { formatLocationDisplay } from '@/components/home/LocationBar';
 import { getLocationErrorMessage } from '@/services/location.service';
-import { AGE_MAX_DIGITS, AGE_MIN, commitAgeInput, finalizeAge, sanitizeAgeInput } from '@/utils/ageInput';
+import {
+  AGE_MAX_DIGITS,
+  AGE_MIN,
+  commitAgeInput,
+  finalizeAge,
+  sanitizeAgeInput,
+} from '@/utils/ageInput';
+import {
+  preventAndroidChipTextClip,
+  preventAndroidLabelClip,
+  preventAndroidListItemTextClip,
+  preventAndroidTextClip,
+} from '@/utils/androidTextFix';
 
 const TITLE_MAX = 11;
 const DESCRIPTION_MAX = 29;
+const POST_SLOT_LIMIT_TITLE = 'Ad slots used';
+const POST_SLOT_LIMIT_MESSAGE =
+  'Your ads are used. Wait for the next 30 days for a new ad slot.';
+
 
 /** Letters/spaces/punctuation only — strip digits and enforce max length */
 const sanitizeNoNumbers = (text: string, max: number) =>
@@ -57,16 +73,33 @@ export default function CreatePostScreen() {
   const [minAge, setMinAge] = useState('');
   const [maxAge, setMaxAge] = useState('');
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitMessage, setLimitMessage] = useState(
-    'You have reached your post limit.'
-  );
+  const [limitMessage, setLimitMessage] = useState(POST_SLOT_LIMIT_MESSAGE);
   const [limitPlan, setLimitPlan] = useState<'free' | 'pro' | 'business' | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [quota, setQuota] = useState<{
+    plan: 'free' | 'pro' | 'business';
+    postCount: number;
+    featuredCount: number;
+    postLimit: number;
+    featuredLimit: number;
+    extraPostPrice: number;
+    extraFeaturePrice: number;
+    canPostFree: boolean;
+    canFeatureFree: boolean;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (formError) setFormError('');
+  }, [title, selectedCategories, location, description, minAge, maxAge]);
 
   React.useEffect(() => {
     fetchCategories();
+    jobService.getQuota().then((data) => {
+      setQuota(data);
+    }).catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -120,45 +153,50 @@ export default function CreatePostScreen() {
   };
 
   const pickFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Gallery access is needed to select a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
+    const uri = await pickImageFromLibrary({
       aspect: [4, 3],
       quality: 0.8,
     });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      setPhotoUri(result.assets[0].uri);
-    }
+    if (uri) setPhotoUri(uri);
   };
 
   const pickFromCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
+    const uri = await pickImageFromCamera({
       aspect: [4, 3],
       quality: 0.8,
     });
-
-    if (!result.canceled && result.assets[0]?.uri) {
-      setPhotoUri(result.assets[0].uri);
-    }
+    if (uri) setPhotoUri(uri);
   };
 
   const handlePhotoPress = () => {
     setShowPhotoOptions(true);
+  };
+
+  const getPublishError = (
+    cleanTitle: string,
+    cleanDescription: string
+  ) => {
+    const missing: string[] = [];
+    if (!cleanTitle) missing.push('Title');
+    if (selectedCategories.length === 0) missing.push('Category');
+    if (!location.trim()) missing.push('Location');
+    if (!cleanDescription) missing.push('Description');
+    if (missing.length > 0) {
+      return `Please fill: ${missing.join(', ')}`;
+    }
+    if (cleanTitle.length > TITLE_MAX) {
+      return `Title must be at most ${TITLE_MAX} characters.`;
+    }
+    if (cleanDescription.length > DESCRIPTION_MAX) {
+      return `Description must be at most ${DESCRIPTION_MAX} characters.`;
+    }
+    if (/[0-9]/.test(title) || /[0-9]/.test(description)) {
+      return 'Title and description cannot contain numbers.';
+    }
+    if ((minAge && Number(minAge) < AGE_MIN) || (maxAge && Number(maxAge) < AGE_MIN)) {
+      return `Age must be ${AGE_MIN} or older.`;
+    }
+    return '';
   };
 
   const handlePublish = async (options?: { skipPhoto?: boolean }) => {
@@ -166,38 +204,16 @@ export default function CreatePostScreen() {
 
     const cleanTitle = sanitizeNoNumbers(title.trim(), TITLE_MAX);
     const cleanDescription = sanitizeNoNumbers(description.trim(), DESCRIPTION_MAX);
-
-    if (!cleanTitle || selectedCategories.length === 0 || !location || !cleanDescription) {
-      Alert.alert('Missing fields', 'Please fill in all required fields');
+    const error = getPublishError(cleanTitle, cleanDescription);
+    if (error) {
+      setFormError(error);
       return;
     }
-
-    if (cleanTitle.length > TITLE_MAX) {
-      Alert.alert('Title too long', `Title must be at most ${TITLE_MAX} characters.`);
-      return;
-    }
-
-    if (cleanDescription.length > DESCRIPTION_MAX) {
-      Alert.alert(
-        'Description too long',
-        `Description must be at most ${DESCRIPTION_MAX} characters.`
-      );
-      return;
-    }
-
-    if (/[0-9]/.test(title) || /[0-9]/.test(description)) {
-      Alert.alert('Invalid input', 'Title and description cannot contain numbers.');
-      return;
-    }
-
-    if ((minAge && Number(minAge) < AGE_MIN) || (maxAge && Number(maxAge) < AGE_MIN)) {
-      Alert.alert('Invalid age', `Age must be ${AGE_MIN} or older.`);
-      return;
-    }
+    setFormError('');
 
     setLoading(true);
+    let imageUrls: string[] = [];
     try {
-      let imageUrls: string[] = [];
 
       if (photoUri && !options?.skipPhoto) {
         setUploadingPhoto(true);
@@ -208,18 +224,9 @@ export default function CreatePostScreen() {
           setLoading(false);
           setUploadingPhoto(false);
           const serverMsg = uploadErr.response?.data?.message;
-          Alert.alert(
-            'Photo upload failed',
+          setFormError(
             serverMsg ||
-              'Could not upload the photo. You can publish without a photo or try again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Publish without photo',
-                onPress: () => handlePublish({ skipPhoto: true }),
-              },
-              { text: 'Try again' },
-            ]
+              'Could not upload the photo. Remove it or try again.'
           );
           return;
         } finally {
@@ -227,7 +234,7 @@ export default function CreatePostScreen() {
         }
       }
 
-      await jobService.createJob({
+      const jobBody = {
         title: cleanTitle,
         categories: selectedCategories.map(c => c._id),
         price: Number(price) || 0,
@@ -243,16 +250,27 @@ export default function CreatePostScreen() {
           minAge: finalizeAge(minAge),
           maxAge: finalizeAge(maxAge),
         }
-      });
+      };
+
+      const needsExtraPostPay =
+        (quota?.plan === 'business' || quota?.plan === 'pro') && !quota.canPostFree;
+
+      if (needsExtraPostPay) {
+        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
+        setShowLimitModal(true);
+        return;
+      }
+
+      await jobService.createJob(jobBody);
       Alert.alert('Success', 'Post published successfully!');
       router.replace('/(tabs)');
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (err.response?.status === 402) {
+        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
+        setShowLimitModal(true);
+      } else if (err.response?.status === 403) {
         const data = err.response?.data || {};
-        setLimitMessage(
-          data.message ||
-            'You have reached your post limit for this period.'
-        );
+        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
         setLimitPlan(
           data.plan === 'pro' || data.plan === 'business' || data.plan === 'free'
             ? data.plan
@@ -260,7 +278,7 @@ export default function CreatePostScreen() {
         );
         setShowLimitModal(true);
       } else {
-        Alert.alert('Error', err.response?.data?.message || 'Failed to publish post');
+        setFormError(err.response?.data?.message || 'Failed to publish post');
       }
     } finally {
       setLoading(false);
@@ -402,7 +420,7 @@ export default function CreatePostScreen() {
             </Text>
             {/* Requirements */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Gender Requirement</Text>
+              <Text style={[styles.label, preventAndroidLabelClip()]}>Gender Requirement</Text>
               <View style={styles.chipRow}>
                 {(['Any', 'Male', 'Female'] as const).map((g) => (
                   <TouchableOpacity
@@ -410,7 +428,7 @@ export default function CreatePostScreen() {
                     style={[styles.reqChip, genderRequirement === g && styles.reqChipActive]}
                     onPress={() => setGenderRequirement(g)}
                   >
-                    <Text style={[styles.reqChipText, genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
+                    <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -457,7 +475,7 @@ export default function CreatePostScreen() {
                   {selectedCategories.length > 0 ? (
                     selectedCategories.map(cat => (
                       <View key={cat._id} style={styles.miniBadge}>
-                        <Text style={styles.miniBadgeText}>{cat.name}</Text>
+                        <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{cat.name}</Text>
                         <TouchableOpacity
                           onPress={() => setSelectedCategories(selectedCategories.filter(c => c._id !== cat._id))}
                           style={styles.removeIcon}
@@ -596,7 +614,7 @@ export default function CreatePostScreen() {
                     <View style={styles.categoryIconContainer}>
                       <Ionicons name={item.icon as any} size={20} color="#FF9500" />
                     </View>
-                    <Text style={styles.categoryItemText}>{item.name}</Text>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={24} color="#00A300" />
                     )}
@@ -622,30 +640,16 @@ export default function CreatePostScreen() {
                 <Ionicons name="lock-closed" size={50} color="#FF9500" />
               </View>
               
-              <Text style={styles.limitTitle}>Post Limit Reached</Text>
+              <Text style={styles.limitTitle}>{POST_SLOT_LIMIT_TITLE}</Text>
               <Text style={styles.limitDescription}>
-                {limitMessage}
+                {limitMessage || POST_SLOT_LIMIT_MESSAGE}
               </Text>
-
-              {limitPlan === 'free' ? (
-                <TouchableOpacity
-                  style={styles.upgradeBtn}
-                  onPress={() => {
-                    setShowLimitModal(false);
-                    router.push('/subscription');
-                  }}
-                >
-                  <Text style={styles.upgradeBtnText}>Upgrade Plan</Text>
-                </TouchableOpacity>
-              ) : null}
 
               <TouchableOpacity 
                 style={styles.maybeLaterBtn}
                 onPress={() => setShowLimitModal(false)}
               >
-                <Text style={styles.maybeLaterText}>
-                  {limitPlan === 'free' ? 'Maybe Later' : 'OK'}
-                </Text>
+                <Text style={styles.maybeLaterText}>OK</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -654,14 +658,24 @@ export default function CreatePostScreen() {
 
       {/* Bottom Button */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 15) }]}>
+        {formError ? (
+          <View style={styles.formErrorBox}>
+            <Ionicons name="alert-circle" size={16} color="#DC2626" />
+            <Text style={styles.formErrorText}>{formError}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity
           style={[styles.publishBtn, loading && { opacity: 0.7 }]}
           activeOpacity={0.8}
-          onPress={handlePublish}
+          onPress={() => handlePublish()}
           disabled={loading}
         >
           <Text style={styles.publishBtnText}>
-            {uploadingPhoto ? 'Uploading photo...' : loading ? 'Publishing...' : 'Publish Post'}
+            {uploadingPhoto
+              ? 'Uploading photo...'
+              : loading
+                ? 'Publishing...'
+                : 'Publish Post'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -840,6 +854,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 8,
     marginLeft: 4,
+    ...preventAndroidTextClip(),
   },
   charHint: {
     fontSize: 12,
@@ -930,10 +945,26 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingTop: 15,
+    paddingTop: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+  },
+  formErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  formErrorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#DC2626',
   },
   publishBtn: {
     backgroundColor: '#00A300', // Green
@@ -1023,7 +1054,6 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   categoryItemText: {
-    flex: 1,
     fontSize: 16,
     color: '#333',
   },

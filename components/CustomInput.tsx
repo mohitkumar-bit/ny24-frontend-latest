@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { preventAndroidTextClip } from '@/utils/androidTextFix';
 
 interface CustomInputProps {
   label?: string;
@@ -68,6 +69,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 6,
     marginLeft: 4,
+    ...preventAndroidTextClip({ flexShrink: 0 }),
   },
   inputWrapper: {
     flexDirection: 'row',

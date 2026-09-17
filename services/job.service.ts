@@ -18,6 +18,15 @@ export interface JobPost {
   status: string;
   createdAt: string;
   isFeatured?: boolean;
+  featuredAt?: string | null;
+  isVideoPost?: boolean;
+  isVideoActive?: boolean;
+  videoUrl?: string | null;
+  videoExpiresAt?: string | null;
+  isBannerAd?: boolean;
+  isBannerActive?: boolean;
+  bannerUrl?: string | null;
+  bannerExpiresAt?: string | null;
   requirements?: {
     gender?: 'Any' | 'Male' | 'Female';
     minAge?: number | null;
@@ -84,6 +93,46 @@ export const jobService = {
 
     const data = await postMultipart<{ imageUrl: string }>('/job/upload-image', buildFormData);
     return data.imageUrl;
+  },
+
+  async uploadVideo(uri: string, mimeType = 'video/mp4', durationSeconds?: number | null) {
+    const buildFormData = async () => {
+      const formData = new FormData();
+      const { appendVideoToFormData } = await import('./formDataUpload');
+      await appendVideoToFormData(
+        formData,
+        'video',
+        uri,
+        'promo-video.mp4',
+        mimeType,
+        durationSeconds
+      );
+      return formData;
+    };
+
+    if (Platform.OS === 'web') {
+      const formData = await buildFormData();
+      const response = await api.post('/job/upload-video', formData, {
+        timeout: 300000,
+      });
+      return response.data.videoUrl as string;
+    }
+
+    const data = await postMultipart<{ videoUrl: string }>(
+      '/job/upload-video',
+      buildFormData
+    );
+    return data.videoUrl;
+  },
+
+  async createVideoPost(data: any) {
+    const response = await api.post('/job/video', data);
+    return response.data;
+  },
+
+  async createBannerAd(data: any) {
+    const response = await api.post('/job/banner', data);
+    return response.data;
   },
 
   async createJob(data: any) {
@@ -159,5 +208,58 @@ export const jobService = {
   async deleteJob(id: string) {
     const response = await api.delete(`/job/${id}`);
     return response.data;
+  },
+
+  async getQuota() {
+    const response = await api.get('/job/quota');
+    return response.data as {
+      plan: 'free' | 'pro' | 'business';
+      postCount: number;
+      featuredCount: number;
+      postLimit: number;
+      featuredLimit: number;
+      extraPostCredits: number;
+      extraFeatureCredits: number;
+      videoPostCredits: number;
+      bannerAdCredits: number;
+      subscriptionPostsUsed: number;
+      subscriptionPostsRemaining: number;
+      subscriptionFeaturesUsed: number;
+      subscriptionFeaturesRemaining: number;
+      extraPostPrice: number;
+      extraFeaturePrice: number;
+      videoPostPrice: number;
+      bannerAdPrice: number;
+      canPostFree: boolean;
+      canFeatureFree: boolean;
+      canPublishVideoPost: boolean;
+      canPublishBannerAd: boolean;
+    };
+  },
+
+  async createAddonOrder(data: any) {
+    const response = await api.post('/job/addon-order', data);
+    return response.data as {
+      paid: boolean;
+      job?: JobPost;
+      merchantOrderId?: string;
+      checkoutUrl?: string;
+      amount?: number;
+      kind?: string;
+      message?: string;
+    };
+  },
+
+  async createFeatureOrder(jobId: string) {
+    const response = await api.post(`/job/${jobId}/feature-order`);
+    return response.data as {
+      paid: boolean;
+      job?: JobPost;
+      merchantOrderId?: string;
+      checkoutUrl?: string;
+      amount?: number;
+      kind?: string;
+      message?: string;
+    };
   },
 };

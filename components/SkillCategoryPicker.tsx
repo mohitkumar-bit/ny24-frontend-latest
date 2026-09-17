@@ -2,16 +2,20 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  Pressable,
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Modal,
+  FlatList,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Category } from '@/services/category.service';
 import { filterValidSkillIds, normalizeSkillId } from '@/utils/skillIds';
-
-const TOP_SKILL_COUNT = 8;
+import {
+  preventAndroidListItemTextClip,
+  preventAndroidTextClip,
+} from '@/utils/androidTextFix';
 
 type Props = {
   categories: Category[];
@@ -27,6 +31,7 @@ export function SkillCategoryPicker({
   disabled,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
 
   const categoryIds = useMemo(
     () => categories.map((cat) => normalizeSkillId(cat._id)).filter(Boolean),
@@ -38,10 +43,25 @@ export function SkillCategoryPicker({
     return valid[0] || null;
   }, [selectedIds, categoryIds]);
 
+  const selectedCategory = useMemo(
+    () => categories.find((cat) => normalizeSkillId(cat._id) === selectedId) || null,
+    [categories, selectedId]
+  );
+
+  const filteredCategories = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return categories;
+    return categories.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categories, search]);
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSearch('');
+  };
+
   const selectSkill = useCallback(
     (rawId: string) => {
       if (disabled) return;
-
       const skillId = normalizeSkillId(rawId);
       if (!skillId || !categoryIds.includes(skillId)) return;
 
@@ -54,162 +74,218 @@ export function SkillCategoryPicker({
     [disabled, categoryIds, selectedId, onChange]
   );
 
-  const selectedName = useMemo(() => {
-    if (!selectedId) return null;
-    return categories.find((cat) => normalizeSkillId(cat._id) === selectedId)?.name ?? null;
-  }, [categories, selectedId]);
-
-  const filteredCategories = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return null;
-    return categories.filter((c) => c.name.toLowerCase().includes(q));
-  }, [categories, search]);
-
-  const topCategories = useMemo(() => {
-    const top = categories.slice(0, TOP_SKILL_COUNT);
-    if (!selectedId) return top;
-    const selected = categories.find((c) => normalizeSkillId(c._id) === selectedId);
-    if (selected && !top.some((c) => normalizeSkillId(c._id) === selectedId)) {
-      return [selected, ...top.slice(0, TOP_SKILL_COUNT - 1)];
-    }
-    return top;
-  }, [categories, selectedId]);
-
-  const displayCategories = filteredCategories ?? topCategories;
-  const isSearching = search.trim().length > 0;
-
   return (
     <View>
-      <Text style={styles.hint}>Select one skill — tap another to switch</Text>
-      {selectedName ? (
-        <Text style={styles.count}>Selected: {selectedName}</Text>
-      ) : null}
-
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search skills..."
-          placeholderTextColor="#999"
-          value={search}
-          onChangeText={setSearch}
-          editable={!disabled}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        {search.length > 0 ? (
-          <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#BBB" />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      <Text style={styles.subLabel}>{isSearching ? 'Results' : 'Top skills'}</Text>
-
-      <View style={styles.container}>
-        {displayCategories.length > 0 ? (
-          displayCategories.map((cat, index) => {
-            const catId = normalizeSkillId(cat._id);
-            const isSelected = catId ? selectedId === catId : false;
-
-            return (
-              <Pressable
-                key={catId || `category-${index}`}
-                style={({ pressed }) => [
-                  styles.badge,
-                  isSelected && styles.badgeSelected,
-                  pressed && !disabled && styles.badgePressed,
-                  disabled && styles.badgeDisabled,
-                ]}
-                onPress={() => selectSkill(catId)}
-                disabled={disabled || !catId}
-              >
-                <Text style={[styles.badgeText, isSelected && styles.badgeTextSelected]}>
-                  {cat.name}
-                </Text>
-              </Pressable>
-            );
-          })
+      <TouchableOpacity
+        style={[styles.pickerTrigger, disabled && styles.pickerDisabled]}
+        onPress={() => !disabled && setModalOpen(true)}
+        disabled={disabled}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="shapes-outline" size={22} color="#666" style={styles.inputIcon} />
+        {selectedCategory ? (
+          <View style={styles.miniBadge}>
+            <Ionicons name={(selectedCategory.icon as any) || 'briefcase-outline'} size={14} color="#FF9500" />
+            <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{selectedCategory.name}</Text>
+            <TouchableOpacity
+              onPress={() => !disabled && onChange([])}
+              style={styles.removeIcon}
+              hitSlop={8}
+              disabled={disabled}
+            >
+              <Ionicons name="close-circle" size={16} color="#FF9500" />
+            </TouchableOpacity>
+          </View>
         ) : (
-          <Text style={styles.emptyText}>No skills found</Text>
+          <Text style={[styles.pickerText, preventAndroidTextClip()]}>Select Category</Text>
         )}
-      </View>
+        <Ionicons name="chevron-down" size={20} color="#999" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              <TouchableOpacity onPress={closeModal}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.categorySearchWrap}>
+              <Ionicons name="search" size={18} color="#999" style={styles.categorySearchIcon} />
+              <TextInput
+                style={styles.categorySearchInput}
+                placeholder="Search categories..."
+                placeholderTextColor="#999"
+                value={search}
+                onChangeText={setSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+                clearButtonMode="while-editing"
+              />
+              {search.length > 0 && Platform.OS !== 'ios' ? (
+                <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color="#BBB" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <FlatList
+              data={filteredCategories}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={styles.modalList}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text style={styles.categoryEmptyText}>No categories found</Text>
+              }
+              renderItem={({ item }) => {
+                const catId = normalizeSkillId(item._id);
+                const isSelected = Boolean(catId && selectedId === catId);
+                return (
+                  <TouchableOpacity
+                    style={styles.categoryItem}
+                    onPress={() => selectSkill(catId)}
+                  >
+                    <View style={styles.categoryIconContainer}>
+                      <Ionicons name={(item.icon as any) || 'briefcase-outline'} size={20} color="#FF9500" />
+                    </View>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
+                    {isSelected ? (
+                      <Ionicons name="checkmark-circle" size={24} color="#00A300" />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hint: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  count: {
-    fontSize: 12,
-    color: '#00A300',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  searchWrap: {
+  pickerTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    minHeight: 60,
     marginBottom: 10,
-    marginTop: 4,
   },
-  searchIcon: {
+  pickerDisabled: {
+    opacity: 0.5,
+  },
+  inputIcon: {
+    marginRight: 12,
+    opacity: 0.7,
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#999',
+  },
+  miniBadge: {
+    flex: 1,
+    backgroundColor: '#FFF5E6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingLeft: 10,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0CC',
+    gap: 6,
+  },
+  miniBadgeText: {
+    fontSize: 13,
+    color: '#FF9500',
+    fontWeight: '600',
+  },
+  removeIcon: {
+    padding: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: '80%',
+    paddingTop: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 25,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  categorySearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+  },
+  categorySearchIcon: {
     marginRight: 8,
   },
-  searchInput: {
+  categorySearchInput: {
     flex: 1,
     fontSize: 15,
     color: '#333',
     paddingVertical: 0,
   },
-  subLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#888',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
+  categoryEmptyText: {
+    textAlign: 'center',
     color: '#999',
-    paddingVertical: 8,
+    fontSize: 15,
+    paddingVertical: 32,
   },
-  container: {
+  modalList: {
+    padding: 20,
+  },
+  categoryItem: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 10,
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
   },
-  badge: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  categoryIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#FFF5E6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
-  badgeSelected: {
-    backgroundColor: '#00A300',
-    borderColor: '#00A300',
-  },
-  badgePressed: {
-    opacity: 0.85,
-  },
-  badgeDisabled: {
-    opacity: 0.5,
-  },
-  badgeText: {
-    color: '#4B5563',
-    fontSize: 14,
-  },
-  badgeTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
+  categoryItemText: {
+    fontSize: 16,
+    color: '#333',
   },
 });

@@ -11,7 +11,8 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
-  Modal
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,11 @@ import {
   getLocationErrorMessage,
 } from '@/services/location.service';
 import { AGE_MAX_DIGITS, AGE_MIN, commitAgeInput, finalizeAge, sanitizeAgeInput } from '@/utils/ageInput';
+import {
+  preventAndroidLabelClip,
+  preventAndroidListItemTextClip,
+  preventAndroidTextClip,
+} from '@/utils/androidTextFix';
 
 const normalizeCategories = (items: Category[]): Category[] =>
   items.map((cat) => ({ ...cat, _id: normalizeSkillId(cat._id) }));
@@ -284,7 +290,7 @@ export default function WorkerRegisterScreen() {
         <Text style={styles.sectionTitle}>Location</Text>
         <View style={styles.inputGroup}>
           <View style={styles.addressLabelRow}>
-            <Text style={[styles.label, styles.addressLabel]}>Address</Text>
+            <Text style={[styles.label, preventAndroidLabelClip()]}>Address</Text>
             <TouchableOpacity
               style={[
                 styles.liveLocationChip,
@@ -388,11 +394,11 @@ export default function WorkerRegisterScreen() {
           animationType="fade"
           onRequestClose={() => setShowGenderModal(false)}
         >
-          <TouchableOpacity 
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowGenderModal(false)}
-          >
+          <View style={styles.modalOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setShowGenderModal(false)}
+            />
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Select Gender</Text>
               {['Male', 'Female', 'Other'].map((option) => (
@@ -404,17 +410,24 @@ export default function WorkerRegisterScreen() {
                     setShowGenderModal(false);
                   }}
                 >
-                  <Text style={[
-                    styles.optionText,
-                    gender === option && styles.optionTextSelected
-                  ]}>{option}</Text>
-                  {gender === option && (
+                  <Text
+                    style={[
+                      styles.optionText,
+                      preventAndroidListItemTextClip(),
+                      gender === option && styles.optionTextSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                  {gender === option ? (
                     <Ionicons name="checkmark" size={20} color="#00A300" />
+                  ) : (
+                    <View style={styles.optionCheckPlaceholder} />
                   )}
                 </TouchableOpacity>
               ))}
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
 
         <View style={styles.toggleRow}>
@@ -510,6 +523,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 8,
+    ...preventAndroidTextClip(),
   },
   charHint: {
     fontSize: 12,
@@ -613,6 +627,10 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     color: '#666',
+  },
+  optionCheckPlaceholder: {
+    width: 20,
+    height: 20,
   },
   optionTextSelected: {
     color: '#00A300',

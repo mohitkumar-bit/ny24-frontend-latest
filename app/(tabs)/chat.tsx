@@ -5,7 +5,6 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity, 
-  SafeAreaView, 
   StatusBar,
   RefreshControl,
   ActivityIndicator,
@@ -14,14 +13,16 @@ import {
   Pressable,
   TextInput,
   Image,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getConversations, togglePinConversation } from '../../services/chat.service';
 import { useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import { authService } from '../../services/auth.service';
+import { formatMessageTime } from '@/utils/formatTime';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LimitModal } from '@/components/LimitModal';
 
@@ -82,8 +83,7 @@ const ChatItem = ({
 
   const getFormattedTime = (dateString?: string) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatMessageTime(dateString);
   };
 
   const handlePinToggle = async () => {
@@ -151,7 +151,7 @@ const ChatItem = ({
                   <BlurView intensity={85} tint="light" style={styles.messageBlurLayer}>
                     <View style={styles.blurOverlay}>
                       <Ionicons name="lock-closed" size={15} color="#FF9500" />
-                      <Text style={styles.blurText}>Upgrade to View</Text>
+                      <Text style={styles.blurText}>Locked</Text>
                     </View>
                   </BlurView>
                 </View>
@@ -187,12 +187,8 @@ const ChatItem = ({
       <LimitModal
         visible={upgradeModalVisible}
         onClose={() => setUpgradeModalVisible(false)}
-        onUpgrade={() => {
-          setUpgradeModalVisible(false);
-          router.push('/subscription' as any);
-        }}
-        title="Chat Locked"
-        message="Free users can only open the top 3 chats. Upgrade to a subscription to view all messages and unlock more chat slots."
+        title="Chat slots are full"
+        message="Chat slots are full. Try after 24 hours."
         plan="Free"
       />
 
@@ -239,7 +235,6 @@ const ChatItem = ({
 
 export default function ChatScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -300,14 +295,17 @@ export default function ChatScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      Keyboard.dismiss();
       fetchData();
-      
-      // Auto-refresh every 5 seconds while screen is focused
+
       const interval = setInterval(() => {
         fetchData();
       }, 5000);
 
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        Keyboard.dismiss();
+      };
     }, [])
   );
 
@@ -317,11 +315,11 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" />
 
       {/* Messages Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
@@ -420,6 +418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
+    paddingTop: 12,
     paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#FDF2E9', // Very light orange/white
