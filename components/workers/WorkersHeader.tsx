@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
 import { LocationBar } from '@/components/home/LocationBar';
 
 type WorkersHeaderProps = {
@@ -8,6 +10,8 @@ type WorkersHeaderProps = {
 };
 
 export function WorkersHeader({ onLocationPress }: WorkersHeaderProps) {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const insets = useSafeAreaInsets();
 
   return (
@@ -18,12 +22,12 @@ export function WorkersHeader({ onLocationPress }: WorkersHeaderProps) {
       ]}
     >
       <LocationBar onPress={onLocationPress} />
-      <Text style={styles.title}>Find Workers</Text>
+      <Text style={styles.title}>{t('workers.findWorkers')}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 40 : 12,

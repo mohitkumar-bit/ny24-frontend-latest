@@ -3,16 +3,16 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Sta
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+
+const SUPPORT_EMAIL = 'supportgigseva@gmail.com';
 
 export default function SupportScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const handleEmailSupport = () => {
-    Linking.openURL('mailto:support@ny.com');
-  };
-
-  const handleCallSupport = () => {
-    Linking.openURL('tel:+911234567890');
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
   };
 
   const FAQItem = ({ question, answer }: { question: string, answer: string }) => (
@@ -37,55 +37,44 @@ export default function SupportScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Help & Support</Text>
+          <Text style={styles.headerTitle}>{t('support.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.contactSection}>
-            <Text style={styles.sectionTitle}>Get in Touch</Text>
+            <Text style={styles.sectionTitle}>{t('support.getInTouch')}</Text>
             <TouchableOpacity style={styles.contactCard} onPress={handleEmailSupport}>
               <View style={[styles.iconCircle, { backgroundColor: '#E1F5FE' }]}>
                 <Ionicons name="mail" size={24} color="#0288D1" />
               </View>
               <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Email Us</Text>
-                <Text style={styles.contactValue}>support@gigseva.com</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CCC" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.contactCard} onPress={handleCallSupport}>
-              <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="call" size={24} color="#388E3C" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Call Us</Text>
-                <Text style={styles.contactValue}>+91 12345 67890</Text>
+                <Text style={styles.contactLabel}>{t('support.emailUs')}</Text>
+                <Text style={styles.contactValue}>{SUPPORT_EMAIL}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#CCC" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.faqSection}>
-            <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+            <Text style={styles.sectionTitle}>{t('support.faqTitle')}</Text>
             <FAQItem
-              question="How do I post a job?"
-              answer="Tap the '+' floating button on the home screen to start creating your job post."
+              question={t('support.faq.postJobQuestion')}
+              answer={t('support.faq.postJobAnswer')}
             />
            
             <FAQItem
-              question="How do I contact a worker?"
-              answer="View the job details and use the 'Chat' or 'Call' buttons to connect directly."
+              question={t('support.faq.contactWorkerQuestion')}
+              answer={t('support.faq.contactWorkerAnswer')}
             />
             <FAQItem
-              question="How do I become a worker?"
-              answer="Go to your Profile and tap 'Become a Worker' to set up your professional profile."
+              question={t('support.faq.becomeWorkerQuestion')}
+              answer={t('support.faq.becomeWorkerAnswer')}
             />
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>We're here to help you 24/7.</Text>
+            <Text style={styles.footerText}>{t('support.footer')}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

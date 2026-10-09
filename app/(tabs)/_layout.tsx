@@ -3,6 +3,7 @@ import { Tabs, usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { CountBadge } from '@/components/CountBadge';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
@@ -10,6 +11,7 @@ import { useUnreadChatCount } from '@/hooks/useUnreadChatCount';
 import { useAppLocation } from '@/contexts/AppLocationContext';
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const { refreshLocation } = useAppLocation();
@@ -56,21 +58,21 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Home',
+            title: t('tabs.home'),
             tabBarIcon: ({ color }) => <Ionicons size={28} name="home" color={color} />,
           }}
         />
         <Tabs.Screen
           name="workers"
           options={{
-            title: 'Workers',
+            title: t('tabs.workers'),
             tabBarIcon: ({ color }) => <Ionicons size={28} name="people-outline" color={color} />,
           }}
         />
         <Tabs.Screen
           name="chat"
           options={{
-            title: 'Chat',
+            title: t('tabs.chat'),
             tabBarIcon: ({ color }) => (
               <View style={{ width: 34, height: 30, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons size={28} name="chatbubbles-outline" color={color} />
@@ -82,7 +84,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="profile"
           options={{
-            title: 'Profile',
+            title: t('tabs.profile'),
             tabBarIcon: ({ color }) => <Ionicons size={28} name="person-outline" color={color} />,
           }}
         />

@@ -14,11 +14,11 @@ import { Logo } from '@/components/Logo';
 import { tokenStorage } from '@/services/tokenStorage';
 import { authService } from '@/services/auth.service';
 import { getPostAuthRoute } from '@/utils/locationNavigation';
+import { useTranslation } from 'react-i18next';
 
 const AUTH_TIMEOUT_MS = 10000;
 /** Hold after tagline finishes so the full reveal is visible before leave */
 const HOLD_AFTER_WRITE_MS = 1500;
-const TAGLINE = 'Unbox the box of opportunities';
 const TAGLINE_WIDTH = 340;
 const WRITE_MS = 3500;
 /** Keep splash on screen for ~5 seconds */
@@ -45,6 +45,8 @@ type TaglineRevealProps = {
 
 /** Left-to-right reveal for the splash tagline */
 function TaglineReveal({ onComplete }: TaglineRevealProps) {
+  const { t } = useTranslation();
+  const tagline = t('splash.tagline');
   const reveal = useRef(new Animated.Value(0)).current;
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
@@ -70,10 +72,10 @@ function TaglineReveal({ onComplete }: TaglineRevealProps) {
   }, [reveal]);
 
   return (
-    <View style={styles.taglineWrap} accessibilityLabel={TAGLINE}>
+    <View style={styles.taglineWrap} accessibilityLabel={tagline}>
       <Animated.View style={[styles.taglineClip, { width: reveal }]}>
         <Text style={styles.tagline} numberOfLines={2}>
-          {TAGLINE}
+          {tagline}
         </Text>
       </Animated.View>
     </View>

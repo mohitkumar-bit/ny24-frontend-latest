@@ -18,8 +18,12 @@ import { LimitModal } from '@/components/LimitModal';
 import { ReportModal } from '@/components/ReportModal';
 import { ReportOptionsMenu } from '@/components/ReportOptionsMenu';
 import { reportWorkerProfile } from '@/services/report.service';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 
 export default function WorkerDetailsScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -48,12 +52,12 @@ export default function WorkerDetailsScreen() {
       if (workerData) {
         setWorker(workerData);
       } else {
-        Alert.alert('Error', 'Worker profile not found');
+        Alert.alert(t('common.error'), t('workerDetails.notFound'));
       }
       setCurrentUser(userData);
     } catch (err: any) {
       console.error('Error fetching worker details:', err);
-      Alert.alert('Error', err.response?.data?.message || 'Failed to load worker details');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('workerDetails.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -67,12 +71,12 @@ export default function WorkerDetailsScreen() {
 
     const receiverId = worker?.user?._id;
     if (!receiverId) {
-      Alert.alert('Error', 'Worker contact not available');
+      Alert.alert(t('common.error'), t('workerDetails.contactUnavailable'));
       return;
     }
 
     if (String(currentUser.id) === String(receiverId)) {
-      Alert.alert('Error', 'You cannot call yourself');
+      Alert.alert(t('common.error'), t('workerDetails.cannotCallSelf'));
       return;
     }
 
@@ -102,7 +106,7 @@ export default function WorkerDetailsScreen() {
       if (data?.code === 'CHAT_LIMIT_REACHED') {
         processLimitError(data);
       } else {
-        Alert.alert('Error', data?.message || 'Failed to send call request');
+        Alert.alert(t('common.error'), data?.message || t('workerDetails.callRequestFailed'));
       }
     } finally {
       setRequestingCall(false);
@@ -160,7 +164,7 @@ export default function WorkerDetailsScreen() {
       return;
     }
 
-    confirmBlockUser(targetUserId, worker?.user?.name || 'This user', () =>
+    confirmBlockUser(targetUserId, worker?.user?.name || t('block.thisUser'), () =>
       setBlockedByMe(true)
     );
   };
@@ -182,11 +186,11 @@ export default function WorkerDetailsScreen() {
       await reportWorkerProfile(id as string, { reason, details });
       setShowReportModal(false);
       Alert.alert(
-        'Report submitted',
-        'Thank you. Our team will review this report and take action if needed.'
+        t('report.submittedTitle'),
+        t('report.submittedMessage')
       );
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not submit report');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('report.submitFailed'));
     } finally {
       setSubmittingReport(false);
     }
@@ -207,6 +211,19 @@ export default function WorkerDetailsScreen() {
     }
   };
 
+  const genderLabel = (gender: string) => {
+    switch (gender) {
+      case 'Male':
+        return t('workerDetails.genderMale');
+      case 'Female':
+        return t('workerDetails.genderFemale');
+      case 'Other':
+        return t('workerDetails.genderOther');
+      default:
+        return gender;
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -214,7 +231,7 @@ export default function WorkerDetailsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Worker Details</Text>
+          <Text style={styles.headerTitle}>{t('workerDetails.workerDetailsTitle')}</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.content}>
@@ -232,8 +249,8 @@ export default function WorkerDetailsScreen() {
       <LimitModal 
         visible={showLimitModal}
         onClose={() => setShowLimitModal(false)}
-        title="Chat slots are full"
-        message="Chat slots are full. Try after 24 hours."
+        title={t('workerDetails.chatSlotsFullTitle')}
+        message={t('workerDetails.chatSlotsFullMessage')}
         plan={modalPlan}
       />
       <LinearGradient
@@ -247,7 +264,7 @@ export default function WorkerDetailsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Professional Profile</Text>
+          <Text style={styles.headerTitle}>{t('workerDetails.professionalProfile')}</Text>
           {!isOwnProfile && worker ? (
             <ReportOptionsMenu
               onReport={handleReportPress}
@@ -256,7 +273,7 @@ export default function WorkerDetailsScreen() {
               blockedByMe={blockedByMe}
               buttonStyle={styles.reportHeaderBtn}
               iconColor="#64748B"
-              reportLabel="Report"
+              reportLabel={t('common.report')}
             />
           ) : (
             <View style={{ width: 40 }} />
@@ -277,22 +294,22 @@ export default function WorkerDetailsScreen() {
                 {worker?.user?.profilePicture ? (
                   <Image source={{ uri: worker.user.profilePicture }} style={styles.avatarLargeImage} />
                 ) : (
-                  <Text style={styles.avatarLargeText}>{worker?.user?.name?.[0]}</Text>
+                  <Text style={styles.avatarLargeText}>{phonetic(worker?.user?.name)?.[0]}</Text>
                 )}
               </View>
               <View style={styles.profileInfo}>
                 <View style={styles.nameRow}>
                   <Text style={styles.workerName} numberOfLines={1}>
-                    {worker?.user?.name}
+                    {phonetic(worker?.user?.name)}
                   </Text>
                   {(worker?.user?.isVerified || worker?.isVerified) ? (
                     <View style={styles.verifiedBadge}>
                       <Ionicons name="checkmark-circle" size={12} color="#fff" />
-                      <Text style={styles.verifiedText}>Verified</Text>
+                      <Text style={styles.verifiedText}>{t('workerDetails.verified')}</Text>
                     </View>
                   ) : null}
                 </View>
-                <Text style={styles.workerTitle}>{worker?.title || 'Professional Worker'}</Text>
+                <Text style={styles.workerTitle}>{phonetic(worker?.title) || t('workerDetails.defaultTitle')}</Text>
               </View>
 
               {/* Availability Badge */}
@@ -308,7 +325,7 @@ export default function WorkerDetailsScreen() {
                   styles.availabilityText,
                   { color: worker?.availability !== false ? '#00A300' : '#70757A' }
                 ]}>
-                  {worker?.availability !== false ? 'Available' : 'Busy'}
+                  {worker?.availability !== false ? t('workerDetails.available') : t('workerDetails.busy')}
                 </Text>
               </View>
             </View>
@@ -316,32 +333,32 @@ export default function WorkerDetailsScreen() {
             <View style={styles.statsContainer}>
               <View style={styles.statBox}>
                 <Text style={styles.statVal}>{worker?.experience}</Text>
-                <Text style={styles.statLab}>Experience</Text>
+                <Text style={styles.statLab}>{t('workerDetails.experience')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text style={styles.statVal}>₹{worker?.hourlyRate}</Text>
-                <Text style={styles.statLab}>Per Hour</Text>
+                <Text style={styles.statLab}>{t('workerDetails.perHour')}</Text>
               </View>
             </View>
           </View>
 
           {/* About Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>About Professional</Text>
+            <Text style={styles.sectionHeader}>{t('workerDetails.aboutProfessional')}</Text>
             <View style={styles.infoCard}>
-              <Text style={styles.bioText}>{worker?.description}</Text>
+              <Text style={styles.bioText}>{phonetic(worker?.description)}</Text>
             </View>
           </View>
 
           {/* Skills Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Skills & Expertise</Text>
+            <Text style={styles.sectionHeader}>{t('workerDetails.skillsExpertise')}</Text>
             <View style={styles.skillsGrid}>
               {worker?.skills?.map((skill: any) => (
                 <View key={skill._id} style={styles.skillItem}>
                   <Ionicons name={skill.icon as any} size={18} color="#FF9500" />
-                  <Text style={styles.skillName}>{skill.name}</Text>
+                  <Text style={styles.skillName}>{phonetic(skill.name)}</Text>
                 </View>
               ))}
             </View>
@@ -349,32 +366,32 @@ export default function WorkerDetailsScreen() {
 
           {/* Location Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Service Area</Text>
+            <Text style={styles.sectionHeader}>{t('workerDetails.serviceArea')}</Text>
             <View style={styles.locationCard}>
               <Ionicons name="location" size={24} color="#FF9500" />
               <View style={styles.locationInfo}>
-                <Text style={styles.cityText}>{worker?.location?.city}</Text>
-                <Text style={styles.addressText}>{worker?.location?.address}</Text>
+                <Text style={styles.cityText}>{phonetic(worker?.location?.city)}</Text>
+                <Text style={styles.addressText}>{phonetic(worker?.location?.address)}</Text>
               </View>
             </View>
           </View>
 
           {/* Personal Info Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Personal Information</Text>
+            <Text style={styles.sectionHeader}>{t('workerDetails.personalInformation')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoBox}>
                 <Ionicons name="calendar-outline" size={20} color="#FF9500" />
                 <View>
-                  <Text style={styles.infoLabel}>Age</Text>
+                  <Text style={styles.infoLabel}>{t('workerDetails.age')}</Text>
                   <Text style={styles.infoValue}>{worker?.age || '24'}</Text>
                 </View>
               </View>
               <View style={styles.infoBox}>
                 <Ionicons name="person-outline" size={20} color="#FF9500" />
                 <View>
-                  <Text style={styles.infoLabel}>Gender</Text>
-                  <Text style={styles.infoValue}>{worker?.gender || 'Male'}</Text>
+                  <Text style={styles.infoLabel}>{t('workerDetails.gender')}</Text>
+                  <Text style={styles.infoValue}>{genderLabel(worker?.gender || 'Male')}</Text>
                 </View>
               </View>
               <View style={[styles.infoBox, { width: '100%', marginTop: 10 }]}>
@@ -384,9 +401,9 @@ export default function WorkerDetailsScreen() {
                   color="#FF9500" 
                 />
                 <View>
-                  <Text style={styles.infoLabel}>Travel Preferences</Text>
+                  <Text style={styles.infoLabel}>{t('workerDetails.travelPreferences')}</Text>
                   <Text style={styles.infoValue}>
-                    {worker?.interestedInLongDistance ? 'Open to Long Distance Work' : 'Prefers Local Area Work'}
+                    {worker?.interestedInLongDistance ? t('workerDetails.openToLongDistance') : t('workerDetails.prefersLocal')}
                   </Text>
                 </View>
               </View>
@@ -430,7 +447,7 @@ export default function WorkerDetailsScreen() {
             ) : (
               <>
                 <Ionicons name="call" size={20} color="#FF9500" />
-                <Text style={styles.callBtnText}>Request Call</Text>
+                <Text style={styles.callBtnText}>{t('workerDetails.requestCall')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -444,7 +461,7 @@ export default function WorkerDetailsScreen() {
             ) : (
               <>
                 <Ionicons name="chatbubble-ellipses" size={20} color="#fff" />
-                <Text style={styles.chatBtnText}>Chat</Text>
+                <Text style={styles.chatBtnText}>{t('common.chat')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -453,8 +470,8 @@ export default function WorkerDetailsScreen() {
 
       <ReportModal
         visible={showReportModal}
-        title="Report worker profile"
-        subtitle="Tell us why you are reporting this profile. Our team will review it."
+        title={t('report.workerTitle')}
+        subtitle={t('report.workerSubtitle')}
         submitting={submittingReport}
         onClose={() => setShowReportModal(false)}
         onSubmit={handleSubmitReport}

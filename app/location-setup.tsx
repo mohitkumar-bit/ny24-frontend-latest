@@ -9,6 +9,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 import { Logo } from '@/components/Logo';
 import { LocationPickerModal } from '@/components/home/LocationPickerModal';
 import { useAppLocation } from '@/contexts/AppLocationContext';
@@ -19,6 +20,7 @@ type SetupPhase = 'checking' | 'detecting' | 'manual';
 
 export default function LocationSetupScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { detectLocation, location } = useAppLocation();
   const [phase, setPhase] = useState<SetupPhase>('checking');
   const hasNavigated = useRef(false);
@@ -83,13 +85,13 @@ export default function LocationSetupScreen() {
         {phase !== 'manual' ? (
           <View style={styles.center}>
             <Logo size={72} />
-            <Text style={styles.title}>Enable your location</Text>
+            <Text style={styles.title}>{t('locationSetup.title')}</Text>
             <Text style={styles.subtitle}>
-              Allow location access so we can show jobs and workers near you.
+              {t('locationSetup.subtitle')}
             </Text>
             <ActivityIndicator size="large" color="#FF9500" style={styles.loader} />
             <Text style={styles.status}>
-              {phase === 'checking' ? 'Getting started…' : 'Detecting your location…'}
+              {phase === 'checking' ? t('locationSetup.gettingStarted') : t('locationSetup.detecting')}
             </Text>
           </View>
         ) : null}

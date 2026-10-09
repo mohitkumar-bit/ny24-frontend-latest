@@ -22,6 +22,8 @@ export type User = {
   location?: string;
   locationDetails?: UserLocationDetails | null;
   isWorker?: boolean;
+  /** Saved app language; null for accounts that have not stored one yet */
+  language?: 'en' | 'hi' | null;
   isVerified?: boolean;
   /** Phone OTP verified during registration */
   verified?: boolean;

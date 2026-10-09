@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { tokenStorage } from './tokenStorage';
 import { forceLogout, shouldSkipTokenRefresh } from './authSession';
+import i18n from '@/i18n';
 
 export const BASE_URL = __DEV__
   ? 'http://localhost:4000/api'
@@ -63,6 +64,13 @@ async function parseFetchJson(response: Response) {
   }
 }
 
+function localizeServerError(data: any) {
+  if (data?.code === 'CONTENT_REJECTED') {
+    data.message = i18n.t('media.contentRejected');
+  }
+  return data;
+}
+
 /** Native-safe multipart upload — fetch keeps Authorization + FormData reliable on Android. */
 export async function postMultipart<T = unknown>(
   path: string,
@@ -101,7 +109,8 @@ export async function postMultipart<T = unknown>(
   const data = await parseFetchJson(response);
 
   if (!response.ok) {
-    const error: any = new Error(data?.message || 'Upload failed');
+    localizeServerError(data);
+    const error: any = new Error(data?.message || i18n.t('media.uploadFailed'));
     error.response = { status: response.status, data };
     throw error;
   }
@@ -135,6 +144,7 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const requestUrl = originalRequest?.url ?? '';
     const errorCode = error.response?.data?.code;
+    localizeServerError(error.response?.data);
 
     if (!originalRequest) {
       return Promise.reject(error);

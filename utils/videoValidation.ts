@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
+import i18n from '@/i18n';
 
 export const MAX_VIDEO_DURATION_SECONDS = 30;
 export const MAX_VIDEO_DURATION_MS = MAX_VIDEO_DURATION_SECONDS * 1000;
@@ -79,7 +80,7 @@ export async function assertVideoWithinLimit(
   }
   if (durationMs > MAX_VIDEO_DURATION_MS) {
     const seconds = Math.ceil(durationMs / 1000);
-    return `Video is ${seconds} seconds. Maximum allowed length is ${MAX_VIDEO_DURATION_SECONDS} seconds.`;
+    return i18n.t('media.videoTooLong', { seconds, max: MAX_VIDEO_DURATION_SECONDS });
   }
   return null;
 }

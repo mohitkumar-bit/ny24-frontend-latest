@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "325192171674",
+    "project_id": "gigseva-337e3",
+    "storage_bucket": "gigseva-337e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:325192171674:android:fdb86995dfded412261f23",
+        "android_client_info": {
+          "package_name": "com.tripledots.geegseva"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDwH2Jsy_mqFeU4SF9HCotjypaNoO1GR4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from '@/utils/keyboardController';
 import * as SplashScreen from 'expo-splash-screen';
@@ -19,12 +20,22 @@ import {
   Inter_900Black,
 } from '@expo-google-fonts/inter';
 import { GreatVibes_400Regular } from '@expo-google-fonts/great-vibes';
+import {
+  NotoSansDevanagari_400Regular,
+  NotoSansDevanagari_500Medium,
+  NotoSansDevanagari_600SemiBold,
+  NotoSansDevanagari_700Bold,
+  NotoSansDevanagari_800ExtraBold,
+} from '@expo-google-fonts/noto-sans-devanagari';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppLocationProvider } from '@/contexts/AppLocationContext';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { loadStoredLanguage } from '@/i18n';
+import { blockScreenCapture } from '@/utils/screenCapture';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+blockScreenCapture().catch(() => {});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -41,20 +52,31 @@ export default function RootLayout() {
     Inter_800ExtraBold,
     Inter_900Black,
     GreatVibes_400Regular,
+    NotoSansDevanagari_400Regular,
+    NotoSansDevanagari_500Medium,
+    NotoSansDevanagari_600SemiBold,
+    NotoSansDevanagari_700Bold,
+    NotoSansDevanagari_800ExtraBold,
   });
+  const [languageReady, setLanguageReady] = useState(false);
 
   useEffect(() => {
-    if (loaded) {
+    loadStoredLanguage().finally(() => setLanguageReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (loaded && languageReady) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded]);
+  }, [loaded, languageReady]);
 
   // Wait for Great Vibes (and Inter) so splash tagline is always cursive
-  if (!loaded) {
+  if (!loaded || !languageReady) {
     return null;
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <KeyboardProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -94,11 +116,13 @@ export default function RootLayout() {
               <Stack.Screen name="notifications/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="verify" options={{ headerShown: false }} />
               <Stack.Screen name="admin-verification" options={{ headerShown: false }} />
+              <Stack.Screen name="language" options={{ headerShown: false }} />
             </Stack>
             <StatusBar style="auto" />
           </AppLocationProvider>
         </ThemeProvider>
       </KeyboardProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

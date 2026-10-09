@@ -14,6 +14,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
+import type { TFunction } from 'i18next';
 import { categoryService, Category } from '@/services/category.service';
 import { AGE_MAX_DIGITS, commitAgeInput, finalizeAge, sanitizeAgeInput } from '@/utils/ageInput';
 import { preventAndroidChipTextClip } from '@/utils/androidTextFix';
@@ -22,6 +25,17 @@ const RATE_MAX_DIGITS = 8;
 
 const digitsOnly = (text: string, max: number) =>
   text.replace(/[^0-9]/g, '').slice(0, max);
+
+const genderLabel = (value: string, t: TFunction) => {
+  switch (value) {
+    case 'Male':
+      return t('filter.male');
+    case 'Female':
+      return t('filter.female');
+    default:
+      return value;
+  }
+};
 
 interface FilterModalProps {
   isVisible: boolean;
@@ -52,6 +66,8 @@ interface FilterModalProps {
 }
 
 export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showLongDistance = false }: FilterModalProps) => {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const [categories, setCategories] = useState<Category[]>([]);
   const [categorySearch, setCategorySearch] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -165,7 +181,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
           selectedCategory === cat._id && styles.activeCategoryText,
         ]}
       >
-        {cat.name}
+        {phonetic(cat.name)}
       </Text>
     </TouchableOpacity>
   );
@@ -188,7 +204,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
 
         <View style={styles.modalContainer}>
           <View style={styles.header}>
-            <Text style={styles.title}>Filter Posts</Text>
+            <Text style={styles.title}>{t('filter.title')}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={24} color="#000" />
             </TouchableOpacity>
@@ -203,11 +219,11 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
             bounces
           >
                 {/* City Filter */}
-                <Text style={styles.sectionTitle}>Location</Text>
+                <Text style={styles.sectionTitle}>{t('filter.location')}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="location-outline" size={20} color="#666" style={styles.inputIcon} />
                   <TextInput
-                    placeholder="Enter city (e.g. Ranchi)"
+                    placeholder={t('filter.cityPlaceholder')}
                     placeholderTextColor="#999"
                     style={styles.input}
                     value={city}
@@ -216,11 +232,11 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 </View>
 
                 {/* Category Filter */}
-                <Text style={styles.sectionTitle}>Category</Text>
+                <Text style={styles.sectionTitle}>{t('filter.category')}</Text>
                 <View style={styles.categorySearchWrap}>
                   <Ionicons name="search" size={18} color="#999" style={styles.inputIcon} />
                   <TextInput
-                    placeholder="Search categories..."
+                    placeholder={t('filter.searchCategories')}
                     placeholderTextColor="#999"
                     style={styles.categorySearchInput}
                     value={categorySearch}
@@ -237,10 +253,10 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 <View style={styles.categoryHeaderRow}>
                   <Text style={styles.categorySubLabel}>
                     {isSearching
-                      ? 'Results'
+                      ? t('filter.results')
                       : showAllCategories
-                        ? `All categories (${categories.length})`
-                        : 'Top categories'}
+                        ? t('filter.allCategories', { total: categories.length })
+                        : t('filter.topCategories')}
                   </Text>
                   {canViewAll ? (
                     <TouchableOpacity
@@ -248,7 +264,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Text style={styles.viewAllText}>
-                        {showAllCategories ? 'Show less' : 'View all'}
+                        {showAllCategories ? t('filter.showLess') : t('filter.viewAll')}
                       </Text>
                     </TouchableOpacity>
                   ) : null}
@@ -264,7 +280,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                     {displayCategories.length > 0 ? (
                       displayCategories.map(renderCategoryChip)
                     ) : (
-                      <Text style={styles.categoryEmptyText}>No categories found</Text>
+                      <Text style={styles.categoryEmptyText}>{t('filter.noCategories')}</Text>
                     )}
                   </ScrollView>
                 ) : (
@@ -272,17 +288,17 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                     {displayCategories.length > 0 ? (
                       displayCategories.map(renderCategoryChip)
                     ) : (
-                      <Text style={styles.categoryEmptyText}>No categories found</Text>
+                      <Text style={styles.categoryEmptyText}>{t('filter.noCategories')}</Text>
                     )}
                   </View>
                 )}
 
                 {/* Price Filter */}
-                <Text style={styles.sectionTitle}>Hourly Rate (₹)</Text>
+                <Text style={styles.sectionTitle}>{t('filter.hourlyRate')}</Text>
                 <View style={styles.row}>
                   <View style={styles.flex1}>
                     <TextInput
-                      placeholder="Min"
+                      placeholder={t('filter.min')}
                       placeholderTextColor="#999"
                       style={styles.smallInput}
                       value={minPrice}
@@ -293,7 +309,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                   </View>
                   <View style={styles.flex1}>
                     <TextInput
-                      placeholder="Max"
+                      placeholder={t('filter.max')}
                       placeholderTextColor="#999"
                       style={styles.smallInput}
                       value={maxPrice}
@@ -305,11 +321,11 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 </View>
 
                 {/* Age Filter */}
-                <Text style={styles.sectionTitle}>Age Range</Text>
+                <Text style={styles.sectionTitle}>{t('filter.ageRange')}</Text>
                 <View style={styles.row}>
                   <View style={styles.flex1}>
                     <TextInput
-                      placeholder="Min Age"
+                      placeholder={t('filter.minAge')}
                       placeholderTextColor="#999"
                       style={styles.smallInput}
                       value={minAge}
@@ -321,7 +337,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                   </View>
                   <View style={styles.flex1}>
                     <TextInput
-                      placeholder="Max Age"
+                      placeholder={t('filter.maxAge')}
                       placeholderTextColor="#999"
                       style={styles.smallInput}
                       value={maxAge}
@@ -334,7 +350,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 </View>
 
                 {/* Gender Filter */}
-                <Text style={styles.sectionTitle}>Gender</Text>
+                <Text style={styles.sectionTitle}>{t('filter.gender')}</Text>
                 <View style={styles.categoriesContainer}>
                   {['Male', 'Female'].map((g) => (
                     <TouchableOpacity
@@ -349,7 +365,7 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                         styles.categoryText,
                         preventAndroidChipTextClip(),
                         gender === g && styles.activeCategoryText
-                      ]}>{g}</Text>
+                      ]}>{genderLabel(g, t)}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -357,8 +373,8 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 {/* Verified Filter */}
                 <View style={styles.switchRow}>
                   <View style={styles.flex1}>
-                    <Text style={styles.switchLabel}>Verified only</Text>
-                    <Text style={styles.switchSubLabel}>Show verified users first</Text>
+                    <Text style={styles.switchLabel}>{t('filter.verifiedOnly')}</Text>
+                    <Text style={styles.switchSubLabel}>{t('filter.verifiedOnlyHint')}</Text>
                   </View>
                   <Switch
                     value={verifiedOnly}
@@ -372,8 +388,8 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
                 {showLongDistance && (
                   <View style={styles.switchRow}>
                     <View style={styles.flex1}>
-                      <Text style={styles.switchLabel}>Long Distance Work</Text>
-                      <Text style={styles.switchSubLabel}>Show workers willing to travel</Text>
+                      <Text style={styles.switchLabel}>{t('filter.longDistance')}</Text>
+                      <Text style={styles.switchSubLabel}>{t('filter.longDistanceHint')}</Text>
                     </View>
                     <Switch
                       value={longDistance}
@@ -389,14 +405,14 @@ export const FilterModal = ({ isVisible, onClose, onApply, initialFilters, showL
 
               <SafeAreaView style={styles.footer}>
                 <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
-                  <Text style={styles.clearBtnText}>Clear All</Text>
+                  <Text style={styles.clearBtnText}>{t('filter.clearAll')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.applyBtn} onPress={handleApply}>
                   <LinearGradient
                     colors={['#FF9500', '#FFD200']}
                     style={styles.applyGradient}
                   >
-                    <Text style={styles.applyBtnText}>Apply Filter</Text>
+                    <Text style={styles.applyBtnText}>{t('filter.applyFilter')}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </SafeAreaView>

@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
+import i18n from '@/i18n';
 
 export type ResolvedLocation = {
   address: string;
@@ -106,32 +107,97 @@ async function getWebPosition(): Promise<{ latitude: number; longitude: number }
           longitude: pos.coords.longitude,
         }),
       (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   });
 }
 
-async function getNativePosition(): Promise<{ latitude: number; longitude: number }> {
-  const servicesEnabled = await Location.hasServicesEnabledAsync();
-  if (!servicesEnabled) {
-    throw new Error('LOCATION_SERVICES_DISABLED');
+const TARGET_ACCURACY_METERS = 10;
+/** After this long, settle for a fix within ACCEPTABLE_ACCURACY_METERS (typical indoors). */
+const SETTLE_AFTER_MS = 8000;
+const ACCEPTABLE_ACCURACY_METERS = 30;
+const ACCURATE_FIX_TIMEOUT_MS = 15000;
+
+const accuracyOf = (fix: Location.LocationObject) => fix.coords.accuracy ?? Infinity;
+
+async function ensureLocationServices() {
+  if (await Location.hasServicesEnabledAsync()) return;
+
+  if (Platform.OS === 'android') {
+    try {
+      // Shows the system dialog to turn on location / Google location accuracy.
+      await Location.enableNetworkProviderAsync();
+      if (await Location.hasServicesEnabledAsync()) return;
+    } catch {
+      // User declined the dialog.
+    }
   }
 
-  const lastKnown = await Location.getLastKnownPositionAsync();
-  if (lastKnown) {
-    return {
-      latitude: lastKnown.coords.latitude,
-      longitude: lastKnown.coords.longitude,
+  throw new Error('LOCATION_SERVICES_DISABLED');
+}
+
+/** Resolves with the most accurate GPS fix seen before the target accuracy or timeout is reached. */
+function watchForAccurateFix(): Promise<Location.LocationObject | null> {
+  return new Promise((resolve) => {
+    let best: Location.LocationObject | null = null;
+    let subscription: Location.LocationSubscription | null = null;
+    let finished = false;
+
+    const startedAt = Date.now();
+    const isGoodEnough = (fix: Location.LocationObject) =>
+      accuracyOf(fix) <= TARGET_ACCURACY_METERS ||
+      (Date.now() - startedAt >= SETTLE_AFTER_MS &&
+        accuracyOf(fix) <= ACCEPTABLE_ACCURACY_METERS);
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      clearTimeout(settleTimer);
+      subscription?.remove();
+      resolve(best);
     };
-  }
 
-  const position = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
+    const timer = setTimeout(finish, ACCURATE_FIX_TIMEOUT_MS);
+    const settleTimer = setTimeout(() => {
+      if (best && isGoodEnough(best)) finish();
+    }, SETTLE_AFTER_MS);
+
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 1000,
+        distanceInterval: 0,
+        mayShowUserSettingsDialog: true,
+      },
+      (fix) => {
+        if (!best || accuracyOf(fix) < accuracyOf(best)) best = fix;
+        if (isGoodEnough(best)) finish();
+      }
+    )
+      .then((sub) => {
+        if (finished) sub.remove();
+        else subscription = sub;
+      })
+      .catch(finish);
   });
+}
+
+async function getNativePosition(): Promise<{ latitude: number; longitude: number }> {
+  await ensureLocationServices();
+
+  const fix =
+    (await watchForAccurateFix()) ??
+    // No GPS fix in time (e.g. indoors) — fall back to the device's cached position.
+    (await Location.getLastKnownPositionAsync());
+
+  if (!fix) {
+    throw new Error('LOCATION_UNAVAILABLE');
+  }
 
   return {
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
+    latitude: fix.coords.latitude,
+    longitude: fix.coords.longitude,
   };
 }
 
@@ -154,9 +220,14 @@ export async function fetchLiveLocation(): Promise<ResolvedLocation> {
     };
   }
 
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') {
+  const permission = await Location.requestForegroundPermissionsAsync();
+  if (permission.status !== 'granted') {
     throw new Error('PERMISSION_DENIED');
+  }
+
+  if (permission.android?.accuracy === 'coarse') {
+    // Android 12+ shows the "Change to precise location" dialog on a repeat request.
+    await Location.requestForegroundPermissionsAsync().catch(() => undefined);
   }
 
   const { latitude, longitude } = await getNativePosition();
@@ -189,12 +260,12 @@ export async function fetchLiveLocation(): Promise<ResolvedLocation> {
 export function getLocationErrorMessage(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error);
   if (msg === 'PERMISSION_DENIED') {
-    return 'Location permission was denied. Enable it in your device settings.';
+    return i18n.t('location.permissionDenied');
   }
   if (msg === 'LOCATION_SERVICES_DISABLED') {
-    return 'Location services are turned off. Please enable GPS on your device.';
+    return i18n.t('location.servicesDisabled');
   }
-  return 'Could not fetch your location. Try again outdoors or set a mock location in the simulator.';
+  return i18n.t('location.fetchFailed');
 }
 
 export type LocationSuggestion = {

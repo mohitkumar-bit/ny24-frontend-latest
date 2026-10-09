@@ -19,8 +19,13 @@ import { showProfessionalToolsInactive } from '@/utils/professionalTools';
 import { ReportModal } from '@/components/ReportModal';
 import { ReportOptionsMenu } from '@/components/ReportOptionsMenu';
 import { reportPost } from '@/services/report.service';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
+import { getBoostDaysIfStartedNow, getPostExpiresAt } from '@/utils/formatTime';
 
 export default function DetailScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : String(params.id || '');
   const router = useRouter();
@@ -82,7 +87,7 @@ export default function DetailScreen() {
     }
 
     if (!user.isWorker) {
-      alert('You need a worker profile to apply for jobs.');
+      alert(t('jobDetails.workerProfileRequired'));
       router.push('/worker-register' as any);
       return;
     }
@@ -90,9 +95,9 @@ export default function DetailScreen() {
     setApplying(true);
     try {
       await applicationService.apply(id as string, 'I am interested in this job.');
-      alert('Application submitted successfully!');
+      alert(t('jobDetails.applicationSubmitted'));
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to apply');
+      alert(err.response?.data?.message || t('jobDetails.applyFailed'));
     } finally {
       setApplying(false);
     }
@@ -112,7 +117,7 @@ export default function DetailScreen() {
       router.replace('/my-ads' as any);
     } catch (err: any) {
       setDeleting(false);
-      Alert.alert('Error', err.response?.data?.message || 'Failed to delete job');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('jobDetails.deleteFailed'));
     }
   };
 
@@ -128,13 +133,13 @@ export default function DetailScreen() {
       const order = await jobService.createFeatureOrder(id);
       setShowFeatureConfirm(false);
       if (!order.paid) {
-        Alert.alert('Featured', order.message || 'This post is now featured.');
+        Alert.alert(t('jobDetails.featured'), order.message || t('jobDetails.featuredMessage'));
         fetchData();
         return;
       }
       showProfessionalToolsInactive();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not feature this post');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('jobDetails.featureFailed'));
     } finally {
       setFeaturing(false);
     }
@@ -148,12 +153,12 @@ export default function DetailScreen() {
 
     const author = job?.author;
     if (!author || typeof author !== 'object') {
-      Alert.alert('Error', 'Author contact not available');
+      Alert.alert(t('common.error'), t('jobDetails.authorContactUnavailable'));
       return;
     }
 
     if (String(user.id) === String(author._id)) {
-      Alert.alert('Error', 'You cannot call yourself');
+      Alert.alert(t('common.error'), t('jobDetails.cannotCallSelf'));
       return;
     }
 
@@ -183,7 +188,7 @@ export default function DetailScreen() {
       if (data?.code === 'CHAT_LIMIT_REACHED') {
         processLimitError(data);
       } else {
-        Alert.alert('Error', data?.message || 'Failed to send call request');
+        Alert.alert(t('common.error'), data?.message || t('jobDetails.callRequestFailed'));
       }
     } finally {
       setRequestingCall(false);
@@ -239,9 +244,12 @@ export default function DetailScreen() {
     job?.author && typeof job.author === 'object' ? job.author._id : job?.author;
   const userId = user?.id || (user as any)?._id;
   const isAuthor = !loading && !!userId && !!authorId && String(userId) === String(authorId);
+  const boostDays = job ? getBoostDaysIfStartedNow(getPostExpiresAt(job)) : 0;
   const canShowFeature =
     isAuthor &&
+    !job?.isArchived &&
     !job?.isFeatured &&
+    boostDays > 0 &&
     (quota?.canFeatureFree || quota?.plan === 'pro' || quota?.plan === 'business');
 
   const handleReportPress = () => {
@@ -259,11 +267,11 @@ export default function DetailScreen() {
       await reportPost(job._id, { reason, details });
       setShowReportModal(false);
       Alert.alert(
-        'Report submitted',
-        'Thank you. Our team will review this report and take action if needed.'
+        t('report.submittedTitle'),
+        t('report.submittedMessage')
       );
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not submit report');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('report.submitFailed'));
     } finally {
       setSubmittingReport(false);
     }
@@ -282,8 +290,8 @@ export default function DetailScreen() {
       setIsSaved(!!res.isSaved);
     } catch (err: any) {
       Alert.alert(
-        'Error',
-        err.response?.data?.message || 'Could not save this post'
+        t('common.error'),
+        err.response?.data?.message || t('jobDetails.saveFailed')
       );
     } finally {
       setSaving(false);
@@ -371,8 +379,8 @@ export default function DetailScreen() {
       <LimitModal 
         visible={showLimitModal}
         onClose={() => setShowLimitModal(false)}
-        title="Chat slots are full"
-        message="Chat slots are full. Try after 24 hours."
+        title={t('jobDetails.chatSlotsFullTitle')}
+        message={t('jobDetails.chatSlotsFullMessage')}
         plan={modalPlan}
       />
 
@@ -425,7 +433,7 @@ export default function DetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="star" size={14} color="#fff" />
-                      <Text style={styles.headerFeatureBtnText}>Feature</Text>
+                      <Text style={styles.headerFeatureBtnText}>{t('jobDetails.feature')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -438,7 +446,7 @@ export default function DetailScreen() {
                   <ReportOptionsMenu
                     onReport={handleReportPress}
                     iconColor="#000"
-                    reportLabel="Report"
+                    reportLabel={t('common.report')}
                   />
                 </View>
                 <TouchableOpacity
@@ -464,30 +472,36 @@ export default function DetailScreen() {
             {job?.isFeatured ? (
               <View style={styles.featuredBadge}>
                 <Ionicons name="star" size={12} color="#fff" />
-                <Text style={styles.featuredBadgeText}>Featured</Text>
+                <Text style={styles.featuredBadgeText}>{t('jobDetails.featured')}</Text>
+              </View>
+            ) : null}
+            {job?.isArchived ? (
+              <View style={styles.archivedBadge}>
+                <Ionicons name="archive-outline" size={12} color="#475569" />
+                <Text style={styles.archivedBadgeText}>{t('myAds.archived')}</Text>
               </View>
             ) : null}
             {job?.categories?.map((cat: any) => (
               <View key={cat._id} style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{cat.name}</Text>
+                <Text style={styles.categoryText}>{phonetic(cat.name)}</Text>
               </View>
             ))}
           </View>
 
-          <Text style={styles.title}>{job?.title}</Text>
+          <Text style={styles.title}>{phonetic(job?.title)}</Text>
 
           <View style={styles.priceContainer}>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>₹</Text>
               <Text style={styles.priceValue}>{job?.price}</Text>
-              <Text style={styles.priceSuffix}>/service</Text>
+              <Text style={styles.priceSuffix}>{t('jobDetails.perService')}</Text>
             </View>
           </View>
 
           <View style={styles.metaSection}>
             <View style={styles.metaRow}>
               <Ionicons name="location-outline" size={18} color="#ccc" />
-              <Text style={styles.metaText}>{job?.location?.address || 'Unknown'}</Text>
+              <Text style={styles.metaText}>{phonetic(job?.location?.address) || t('jobDetails.unknownLocation')}</Text>
             </View>
             <View style={styles.metaRow}>
               <Ionicons name="time-outline" size={18} color="#ccc" />
@@ -501,35 +515,35 @@ export default function DetailScreen() {
 
           {/* Description Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.sectionTitle}>{t('jobDetails.description')}</Text>
             <Text style={styles.descriptionText}>
-              {job?.description}
+              {phonetic(job?.description)}
             </Text>
           </View>
 
           {/* Seller Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Author</Text>
+            <Text style={styles.sectionTitle}>{t('jobDetails.author')}</Text>
             <View style={styles.sellerCard}>
               <View style={styles.sellerAvatar}>
                 {typeof job?.author === 'object' && job.author.profilePicture ? (
                   <Image source={{ uri: job.author.profilePicture }} style={styles.sellerAvatarImage} />
                 ) : (
                   <Text style={styles.avatarText}>
-                    {typeof job?.author === 'object' ? job.author.name[0] : 'U'}
+                    {typeof job?.author === 'object' ? phonetic(job.author.name)[0] : 'U'}
                   </Text>
                 )}
               </View>
               <View style={styles.sellerInfo}>
                 <View style={styles.sellerNameRow}>
                   <Text style={styles.sellerName}>
-                    {typeof job?.author === 'object' ? job.author.name : 'Anonymous'}
+                    {typeof job?.author === 'object' ? phonetic(job.author.name) : t('jobDetails.anonymous')}
                   </Text>
                   {typeof job?.author === 'object' && job.author.isVerified && (
                     <VerifiedBadge size={18} />
                   )}
                 </View>
-                <Text style={styles.sellerSub}>Author</Text>
+                <Text style={styles.sellerSub}>{t('jobDetails.author')}</Text>
               </View>
             </View>
           </View>
@@ -550,7 +564,7 @@ export default function DetailScreen() {
               ) : (
                 <>
                   <Ionicons name="trash-outline" size={20} color="#fff" />
-                  <Text style={styles.deleteBtnText}>Delete Ad</Text>
+                  <Text style={styles.deleteBtnText}>{t('jobDetails.deleteAd')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -565,7 +579,7 @@ export default function DetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="call-outline" size={20} color="#FF9500" />
-                      <Text style={styles.callBtnText}>Request Call</Text>
+                      <Text style={styles.callBtnText}>{t('jobDetails.requestCall')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -580,7 +594,7 @@ export default function DetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
-                      <Text style={styles.chatActionBtnText}>Chat</Text>
+                      <Text style={styles.chatActionBtnText}>{t('common.chat')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -591,7 +605,7 @@ export default function DetailScreen() {
                 onPress={() => router.push('/worker-register' as any)}
               >
                 <Ionicons name="person-add-outline" size={20} color="#fff" />
-                <Text style={styles.registerBtnText}>Create Working Profile First</Text>
+                <Text style={styles.registerBtnText}>{t('jobDetails.createWorkingProfileFirst')}</Text>
               </TouchableOpacity>
             )}
           </>
@@ -606,9 +620,9 @@ export default function DetailScreen() {
       >
         <View style={styles.deleteOverlay}>
           <View style={styles.deleteSheet}>
-            <Text style={styles.deleteTitle}>Delete this ad?</Text>
+            <Text style={styles.deleteTitle}>{t('jobDetails.deleteConfirmTitle')}</Text>
             <Text style={styles.deleteMessage}>
-              This cannot be undone. The post will be removed from My Ads and the feed.
+              {t('jobDetails.deleteConfirmMessage')}
             </Text>
             <View style={styles.deleteActions}>
               <TouchableOpacity
@@ -616,7 +630,7 @@ export default function DetailScreen() {
                 onPress={() => setShowDeleteConfirm(false)}
                 disabled={deleting}
               >
-                <Text style={styles.deleteCancelText}>Cancel</Text>
+                <Text style={styles.deleteCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteConfirmBtn}
@@ -626,7 +640,7 @@ export default function DetailScreen() {
                 {deleting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.deleteConfirmText}>Delete</Text>
+                  <Text style={styles.deleteConfirmText}>{t('common.delete')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -642,11 +656,16 @@ export default function DetailScreen() {
       >
         <View style={styles.deleteOverlay}>
           <View style={styles.deleteSheet}>
-            <Text style={styles.deleteTitle}>Feature this post?</Text>
+            <Text style={styles.deleteTitle}>{t('jobDetails.featureConfirmTitle')}</Text>
             <Text style={styles.deleteMessage}>
               {quota?.canFeatureFree
-                ? 'This post will be featured for 30 days using your included featured slot.'
-                : 'Professional tools are not active. Paid featuring is unavailable in the app right now.'}
+                ? t(
+                    boostDays === 1
+                      ? 'jobDetails.featureConfirmFreeOneDay'
+                      : 'jobDetails.featureConfirmFree',
+                    { days: boostDays }
+                  )
+                : t('jobDetails.featureConfirmInactive')}
             </Text>
             <View style={styles.deleteActions}>
               <TouchableOpacity
@@ -654,7 +673,7 @@ export default function DetailScreen() {
                 onPress={() => setShowFeatureConfirm(false)}
                 disabled={featuring}
               >
-                <Text style={styles.deleteCancelText}>Cancel</Text>
+                <Text style={styles.deleteCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.featureConfirmBtn}
@@ -665,7 +684,7 @@ export default function DetailScreen() {
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <Text style={styles.deleteConfirmText}>
-                    {quota?.canFeatureFree ? 'Feature' : 'OK'}
+                    {quota?.canFeatureFree ? t('jobDetails.feature') : t('common.ok')}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -676,8 +695,8 @@ export default function DetailScreen() {
 
       <ReportModal
         visible={showReportModal}
-        title="Report post"
-        subtitle="Tell us why you are reporting this post. Our team will review it."
+        title={t('report.postTitle')}
+        subtitle={t('report.postSubtitle')}
         submitting={submittingReport}
         onClose={() => setShowReportModal(false)}
         onSubmit={handleSubmitReport}
@@ -783,6 +802,20 @@ const styles = StyleSheet.create({
   },
   featuredBadgeText: {
     color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  archivedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  archivedBadgeText: {
+    color: '#475569',
     fontWeight: 'bold',
     fontSize: 13,
   },

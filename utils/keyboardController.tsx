@@ -23,6 +23,9 @@ function hasKeyboardControllerNative(): boolean {
 
 const isLinked = hasKeyboardControllerNative();
 
+/** True when react-native-keyboard-controller drives keyboard insets (both platforms). */
+export const isKeyboardControllerLinked = isLinked;
+
 type KeyboardProviderProps = {
   children?: React.ReactNode;
   statusBarTranslucent?: boolean;
@@ -49,12 +52,13 @@ const FallbackKeyboardAvoidingView = ({
   children,
   style,
   keyboardVerticalOffset,
+  behavior,
   ...rest
 }: KeyboardAvoidingViewProps) => (
   <RNKeyboardAvoidingView
     {...rest}
     style={style}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    behavior={behavior ?? (Platform.OS === 'ios' ? 'padding' : 'height')}
     keyboardVerticalOffset={keyboardVerticalOffset ?? 0}
   >
     {children}

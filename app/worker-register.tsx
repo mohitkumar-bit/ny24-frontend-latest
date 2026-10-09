@@ -15,6 +15,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { workerService } from '@/services/worker.service';
 import { authService } from '@/services/auth.service';
@@ -36,7 +37,7 @@ import {
 const normalizeCategories = (items: Category[]): Category[] =>
   items.map((cat) => ({ ...cat, _id: normalizeSkillId(cat._id) }));
 
-const TITLE_MAX = 15;
+const TITLE_MAX = 21;
 const EXPERIENCE_MAX = 2;
 const RATE_MAX = 7;
 const PINCODE_MAX = 8;
@@ -49,8 +50,24 @@ const sanitizeNoNumbers = (text: string, max?: number) => {
 const digitsOnly = (text: string, max: number) =>
   String(text ?? '').replace(/[^0-9]/g, '').slice(0, max);
 
+const GENDER_OPTIONS = ['Male', 'Female', 'Other'] as const;
+
 export default function WorkerRegisterScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
+
+  const genderLabel = (value: string) => {
+    switch (value) {
+      case 'Male':
+        return t('gender.male');
+      case 'Female':
+        return t('gender.female');
+      case 'Other':
+        return t('gender.other');
+      default:
+        return value;
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -142,7 +159,7 @@ export default function WorkerRegisterScreen() {
       setPincode(digitsOnly(resolved.pincode || '', PINCODE_MAX));
       setCoordinates(resolved.coordinates);
     } catch (error) {
-      Alert.alert('Location failed', getLocationErrorMessage(error));
+      Alert.alert(t('workerRegister.locationFailed'), getLocationErrorMessage(error));
     } finally {
       setDetectingLocation(false);
     }
@@ -152,32 +169,32 @@ export default function WorkerRegisterScreen() {
     const cleanTitle = sanitizeNoNumbers(title.trim(), TITLE_MAX);
 
     if (!cleanTitle || !hourlyRate || selectedSkills.length === 0) {
-      Alert.alert('Error', 'Please fill in all required fields (Title, Skills, and Hourly Rate)');
+      Alert.alert(t('common.error'), t('workerRegister.requiredFields'));
       return;
     }
 
     if (/\d/.test(title)) {
-      Alert.alert('Error', 'Title cannot include numbers');
+      Alert.alert(t('common.error'), t('workerRegister.titleNoNumbers'));
       return;
     }
 
     if (cleanTitle.length > TITLE_MAX) {
-      Alert.alert('Error', `Title can be at most ${TITLE_MAX} characters`);
+      Alert.alert(t('common.error'), t('workerRegister.titleMax', { max: TITLE_MAX }));
       return;
     }
 
     if (/\d/.test(description)) {
-      Alert.alert('Error', 'Description cannot include numbers');
+      Alert.alert(t('common.error'), t('workerRegister.descriptionNoNumbers'));
       return;
     }
 
     if (description.length > 26) {
-      Alert.alert('Error', 'Description can be at most 26 characters');
+      Alert.alert(t('common.error'), t('workerRegister.descriptionMax', { max: 26 }));
       return;
     }
 
     if (age && Number(age) < AGE_MIN) {
-      Alert.alert('Error', `Age must be ${AGE_MIN} or older`);
+      Alert.alert(t('common.error'), t('workerRegister.ageMin', { min: AGE_MIN }));
       return;
     }
 
@@ -205,14 +222,14 @@ export default function WorkerRegisterScreen() {
     try {
       if (isEdit) {
         await workerService.updateProfile(payload);
-        Alert.alert('Success', 'Profile updated successfully!');
+        Alert.alert(t('common.success'), t('workerRegister.profileUpdated'));
       } else {
         await workerService.createProfile(payload);
-        Alert.alert('Success', 'Worker profile created successfully!');
+        Alert.alert(t('common.success'), t('workerRegister.profileCreated'));
       }
       router.replace('/(tabs)/profile');
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to save profile');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('workerRegister.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -224,39 +241,39 @@ export default function WorkerRegisterScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isEdit ? 'Edit Working Profile' : 'Become a Worker'}</Text>
+        <Text style={styles.headerTitle}>{isEdit ? t('workerRegister.editTitle') : t('workerRegister.becomeWorker')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>Professional Info</Text>
+        <Text style={styles.sectionTitle}>{t('workerRegister.professionalInfo')}</Text>
 
         <CustomInput
-          label="Professional Title *"
-          placeholder="e.g. Expert Electrician"
+          label={t('workerRegister.professionalTitle')}
+          placeholder={t('workerRegister.titlePlaceholder')}
           value={title}
-          onChangeText={(t) => setTitle(sanitizeNoNumbers(t, TITLE_MAX))}
+          onChangeText={(text) => setTitle(sanitizeNoNumbers(text, TITLE_MAX))}
           maxLength={TITLE_MAX}
         />
         <Text style={styles.charHint}>
-          {title.length}/{TITLE_MAX} · letters only, no numbers
+          {t('workerRegister.charHint', { current: title.length, max: TITLE_MAX })}
         </Text>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description</Text>
+          <Text style={styles.label}>{t('workerRegister.description')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter description of experience and services..."
+            placeholder={t('workerRegister.descriptionPlaceholder')}
             placeholderTextColor="#999"
             value={description}
-            onChangeText={(t) => setDescription(sanitizeDescription(t))}
+            onChangeText={(text) => setDescription(sanitizeDescription(text))}
             multiline
             numberOfLines={4}
             maxLength={26}
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Skills / Categories *</Text>
+        <Text style={styles.sectionTitle}>{t('workerRegister.skillsCategories')}</Text>
         <SkillCategoryPicker
           categories={categories}
           selectedIds={selectedSkills}
@@ -267,30 +284,30 @@ export default function WorkerRegisterScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <CustomInput
-              label="Experience (Years)"
+              label={t('workerRegister.experience')}
               placeholder="0"
               value={experience}
-              onChangeText={(t) => setExperience(digitsOnly(t, EXPERIENCE_MAX))}
+              onChangeText={(text) => setExperience(digitsOnly(text, EXPERIENCE_MAX))}
               keyboardType="numeric"
               maxLength={EXPERIENCE_MAX}
             />
           </View>
           <View style={{ flex: 1 }}>
             <CustomInput
-              label="Hourly Rate (₹) *"
+              label={t('workerRegister.hourlyRate')}
               placeholder="0"
               value={hourlyRate}
-              onChangeText={(t) => setHourlyRate(digitsOnly(t, RATE_MAX))}
+              onChangeText={(text) => setHourlyRate(digitsOnly(text, RATE_MAX))}
               keyboardType="numeric"
               maxLength={RATE_MAX}
             />
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Location</Text>
+        <Text style={styles.sectionTitle}>{t('workerRegister.location')}</Text>
         <View style={styles.inputGroup}>
           <View style={styles.addressLabelRow}>
-            <Text style={[styles.label, preventAndroidLabelClip()]}>Address</Text>
+            <Text style={[styles.label, preventAndroidLabelClip()]}>{t('workerRegister.address')}</Text>
             <TouchableOpacity
               style={[
                 styles.liveLocationChip,
@@ -304,14 +321,14 @@ export default function WorkerRegisterScreen() {
               ) : (
                 <>
                   <Ionicons name="navigate" size={14} color="#00A300" />
-                  <Text style={styles.liveLocationChipText}>Live location</Text>
+                  <Text style={styles.liveLocationChipText}>{t('workerRegister.liveLocation')}</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
           <TextInput
             style={styles.input}
-            placeholder="Enter address"
+            placeholder={t('workerRegister.addressPlaceholder')}
             placeholderTextColor="#999"
             value={address}
             onChangeText={setAddress}
@@ -320,18 +337,18 @@ export default function WorkerRegisterScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <CustomInput
-              label="City"
-              placeholder="Enter city name"
+              label={t('workerRegister.city')}
+              placeholder={t('workerRegister.cityPlaceholder')}
               value={city}
               onChangeText={setCity}
             />
           </View>
           <View style={{ flex: 1 }}>
             <CustomInput
-              label="Pincode"
-              placeholder="Enter pincode"
+              label={t('workerRegister.pincode')}
+              placeholder={t('workerRegister.pincodePlaceholder')}
               value={pincode}
-              onChangeText={(t) => setPincode(digitsOnly(t, PINCODE_MAX))}
+              onChangeText={(text) => setPincode(digitsOnly(text, PINCODE_MAX))}
               keyboardType="numeric"
               maxLength={PINCODE_MAX}
             />
@@ -340,39 +357,39 @@ export default function WorkerRegisterScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <CustomInput
-              label="State"
-              placeholder="Enter state"
+              label={t('workerRegister.state')}
+              placeholder={t('workerRegister.statePlaceholder')}
               value={state}
               onChangeText={setState}
             />
           </View>
           <View style={{ flex: 1 }}>
             <CustomInput
-              label="Country"
-              placeholder="Enter country"
+              label={t('workerRegister.country')}
+              placeholder={t('workerRegister.countryPlaceholder')}
               value={country}
               onChangeText={setCountry}
             />
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Personal Details</Text>
+        <Text style={styles.sectionTitle}>{t('workerRegister.personalDetails')}</Text>
         <View style={styles.row}>
           <View style={{ flex: 0.35, marginRight: 15 }}>
-            <Text style={styles.label}>Age</Text>
+            <Text style={styles.label}>{t('workerRegister.age')}</Text>
             <TextInput
-              placeholder="e.g. 25"
+              placeholder={t('workerRegister.agePlaceholder')}
               placeholderTextColor="#999"
               value={age}
               style={styles.input}
-              onChangeText={(t) => setAge(sanitizeAgeInput(t))}
+              onChangeText={(text) => setAge(sanitizeAgeInput(text))}
               onBlur={() => setAge((v) => commitAgeInput(v))}
               keyboardType="numeric"
               maxLength={AGE_MAX_DIGITS}
             />
           </View>
           <View style={{ flex: 0.65 }}>
-            <Text style={styles.label}>Gender</Text>
+            <Text style={styles.label}>{t('workerRegister.gender')}</Text>
             <TouchableOpacity 
               style={styles.dropdownTrigger}
               onPress={() => setShowGenderModal(true)}
@@ -381,7 +398,7 @@ export default function WorkerRegisterScreen() {
                 styles.dropdownText,
                 !gender && { color: '#999' }
               ]}>
-                {gender || 'Select'}
+                {gender ? genderLabel(gender) : t('workerRegister.select')}
               </Text>
               <Ionicons name="chevron-down" size={20} color="#666" />
             </TouchableOpacity>
@@ -400,8 +417,8 @@ export default function WorkerRegisterScreen() {
               onPress={() => setShowGenderModal(false)}
             />
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Select Gender</Text>
-              {['Male', 'Female', 'Other'].map((option) => (
+              <Text style={styles.modalTitle}>{t('workerRegister.selectGender')}</Text>
+              {GENDER_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option}
                   style={styles.optionBtn}
@@ -417,7 +434,7 @@ export default function WorkerRegisterScreen() {
                       gender === option && styles.optionTextSelected,
                     ]}
                   >
-                    {option}
+                    {genderLabel(option)}
                   </Text>
                   {gender === option ? (
                     <Ionicons name="checkmark" size={20} color="#00A300" />
@@ -432,8 +449,8 @@ export default function WorkerRegisterScreen() {
 
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.toggleLabel}>Interested in Long Distance Work?</Text>
-            <Text style={styles.toggleSubLabel}>Check this if you can travel far for jobs</Text>
+            <Text style={styles.toggleLabel}>{t('workerRegister.longDistanceLabel')}</Text>
+            <Text style={styles.toggleSubLabel}>{t('workerRegister.longDistanceHint')}</Text>
           </View>
           <Switch
             value={interestedInLongDistance}
@@ -451,7 +468,7 @@ export default function WorkerRegisterScreen() {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitBtnText}>{isEdit ? 'Update Profile' : 'Create Worker Profile'}</Text>
+            <Text style={styles.submitBtnText}>{isEdit ? t('workerRegister.updateProfile') : t('workerRegister.createProfile')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

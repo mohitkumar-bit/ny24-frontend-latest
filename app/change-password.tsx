@@ -19,8 +19,10 @@ import { CustomInput } from '@/components/CustomInput';
 import { CustomButton } from '@/components/CustomButton';
 import { authService } from '@/services/auth.service';
 import { handleAuthFailure } from '@/services/authSession';
+import { useTranslation } from 'react-i18next';
 
 export default function ChangePasswordScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -34,17 +36,17 @@ export default function ChangePasswordScreen() {
     setError(null);
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError('Please fill in all fields');
+      setError(t('changePassword.fillAllFields'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
+      setError(t('changePassword.minLength'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('changePassword.mismatch'));
       return;
     }
 
@@ -58,7 +60,7 @@ export default function ChangePasswordScreen() {
     } catch (err: any) {
       const redirected = await handleAuthFailure(err);
       if (redirected) return;
-      setError(err.response?.data?.message || 'Failed to change password');
+      setError(err.response?.data?.message || t('changePassword.failed'));
     } finally {
       setLoading(false);
     }
@@ -88,7 +90,7 @@ export default function ChangePasswordScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Change Password</Text>
+          <Text style={styles.headerTitle}>{t('changePassword.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -102,28 +104,28 @@ export default function ChangePasswordScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.description}>
-              Enter your current password, then choose a new one with at least 6 characters.
+              {t('changePassword.description')}
             </Text>
 
             <CustomInput
-              label="Current Password"
-              placeholder="Enter current password"
+              label={t('changePassword.currentPassword')}
+              placeholder={t('changePassword.currentPasswordPlaceholder')}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               icon="lock-closed-outline"
               isPassword
             />
             <CustomInput
-              label="New Password"
-              placeholder="Enter new password"
+              label={t('changePassword.newPassword')}
+              placeholder={t('changePassword.newPasswordPlaceholder')}
               value={newPassword}
               onChangeText={setNewPassword}
               icon="key-outline"
               isPassword
             />
             <CustomInput
-              label="Confirm New Password"
-              placeholder="Re-enter new password"
+              label={t('changePassword.confirmPassword')}
+              placeholder={t('changePassword.confirmPasswordPlaceholder')}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               icon="key-outline"
@@ -136,7 +138,7 @@ export default function ChangePasswordScreen() {
               </View>
             ) : null}
 
-            <CustomButton title="Update Password" onPress={handleSubmit} loading={loading} />
+            <CustomButton title={t('changePassword.submit')} onPress={handleSubmit} loading={loading} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -147,8 +149,8 @@ export default function ChangePasswordScreen() {
             <View style={styles.successIconWrap}>
               <Ionicons name="checkmark-circle" size={48} color="#00A300" />
             </View>
-            <Text style={styles.modalTitle}>Password updated</Text>
-            <Text style={styles.modalText}>Your password has been changed successfully.</Text>
+            <Text style={styles.modalTitle}>{t('changePassword.successTitle')}</Text>
+            <Text style={styles.modalText}>{t('changePassword.successMessage')}</Text>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => {
@@ -156,7 +158,7 @@ export default function ChangePasswordScreen() {
                 router.back();
               }}
             >
-              <Text style={styles.modalButtonText}>Done</Text>
+              <Text style={styles.modalButtonText}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>
         </View>

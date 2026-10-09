@@ -12,6 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppNotification, notificationService } from '@/services/notification.service';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
+import type { TFunction } from 'i18next';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString(undefined, {
@@ -22,15 +25,17 @@ const formatDate = (date: string) =>
     minute: '2-digit',
   });
 
-const typeLabels: Record<AppNotification['type'], string> = {
-  general: 'General',
-  promo: 'Promotion',
-  alert: 'Alert',
-  update: 'Update',
-  chat: 'Chat',
-};
+const getTypeLabels = (t: TFunction): Record<AppNotification['type'], string> => ({
+  general: t('notifications.types.general'),
+  promo: t('notifications.types.promo'),
+  alert: t('notifications.types.alert'),
+  update: t('notifications.types.update'),
+  chat: t('notifications.types.chat'),
+});
 
 export default function NotificationDetailScreen() {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [notification, setNotification] = useState<AppNotification | null>(null);
@@ -65,7 +70,7 @@ export default function NotificationDetailScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notification</Text>
+          <Text style={styles.headerTitle}>{t('notifications.detailTitle')}</Text>
         </View>
 
         {loading ? (
@@ -75,7 +80,7 @@ export default function NotificationDetailScreen() {
         ) : !notification ? (
           <View style={styles.centered}>
             <Ionicons name="alert-circle-outline" size={48} color="#CBD5E1" />
-            <Text style={styles.emptyTitle}>Notification not found</Text>
+            <Text style={styles.emptyTitle}>{t('notifications.notFound')}</Text>
           </View>
         ) : (
           <ScrollView
@@ -90,7 +95,7 @@ export default function NotificationDetailScreen() {
 
             <View style={styles.metaRow}>
               <View style={styles.typeBadge}>
-                <Text style={styles.typeText}>{typeLabels[notification.type]}</Text>
+                <Text style={styles.typeText}>{getTypeLabels(t)[notification.type]}</Text>
               </View>
               <Text style={styles.time}>{formatDate(notification.createdAt)}</Text>
             </View>
@@ -105,7 +110,7 @@ export default function NotificationDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',

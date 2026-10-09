@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import { api } from './api';
 
 export const subscribeToPlan = async (planData: {
@@ -9,7 +10,7 @@ export const subscribeToPlan = async (planData: {
     const response = await api.post('/subscription/subscribe', planData);
     return response.data;
   } catch (error: any) {
-    throw error.response?.data?.message || 'Failed to subscribe';
+    throw error.response?.data?.message || i18n.t('myAds.subscription.subscribeFailed');
   }
 };
 
@@ -25,7 +26,7 @@ export const createPhonePeOrder = async (plan: string) => {
       months: number;
     };
   } catch (error: any) {
-    throw error.response?.data?.message || 'Failed to start PhonePe payment';
+    throw error.response?.data?.message || i18n.t('myAds.subscription.paymentStartFailed');
   }
 };
 
@@ -40,7 +41,7 @@ export const verifyPhonePeOrder = async (merchantOrderId: string) => {
       message?: string;
     };
   } catch (error: any) {
-    throw error.response?.data?.message || 'Failed to verify payment';
+    throw error.response?.data?.message || i18n.t('myAds.subscription.paymentVerifyFailed');
   }
 };
 
@@ -49,6 +50,6 @@ export const getSubscriptionStatus = async () => {
     const response = await api.get('/subscription/status');
     return response.data;
   } catch (error: any) {
-    throw error.response?.data?.message || 'Failed to fetch subscription status';
+    throw error.response?.data?.message || i18n.t('myAds.subscription.statusFailed');
   }
 };

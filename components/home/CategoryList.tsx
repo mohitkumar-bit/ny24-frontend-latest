@@ -1,6 +1,8 @@
 import React from 'react';
 import { ScrollView, Text, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 
 import { categoryService, Category } from '@/services/category.service';
 import { tokenStorage } from '@/services/tokenStorage';
@@ -13,6 +15,8 @@ interface CategoryListProps {
 }
 
 export const CategoryList = ({ onSelectCategory, activeCategoryId }: CategoryListProps) => {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -73,7 +77,7 @@ export const CategoryList = ({ onSelectCategory, activeCategoryId }: CategoryLis
             preventAndroidChipTextClip(),
             activeCategoryId === item._id && styles.activeChipText
           ]}>
-            {item.name}
+            {item._id === 'all' ? t('categories.all') : phonetic(item.name)}
           </Text>
         </TouchableOpacity>
       ))}

@@ -4,6 +4,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
+import i18n from '@/i18n';
 
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { CategoryList } from '@/components/home/CategoryList';
@@ -27,10 +30,10 @@ const mapBackendToPost = (job: JobPost): Post => ({
   title: job.title,
   category: job.categories && job.categories.length > 0
     ? job.categories.map((c: any) => c.name).join(', ')
-    : 'General',
+    : i18n.t('home.defaultCategory'),
   price: `₹${job.price}`,
-  location: job.location?.address || 'Unknown',
-  author: job.author && typeof job.author === 'object' ? job.author.name : 'Anonymous',
+  location: job.location?.address || i18n.t('home.unknownLocation'),
+  author: job.author && typeof job.author === 'object' ? job.author.name : i18n.t('home.anonymous'),
   authorId:
     job.author && typeof job.author === 'object' ? String(job.author._id) : undefined,
   authorProfilePicture:
@@ -89,6 +92,8 @@ const DEFAULT_HEADER_HEIGHT = Platform.OS === 'ios' ? 240 : 220;
 const SEARCH_DEBOUNCE_MS = 400;
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topInset = Math.max(
@@ -185,6 +190,10 @@ export default function HomeScreen() {
       if (trimmedQuery) {
         params.search = trimmedQuery;
         if (!filters?.city) delete params.city;
+        // Lets the backend target video/banner promos to the selected location
+        const selected = locationRef.current;
+        if (selected?.city?.trim()) params.userCity = selected.city.trim();
+        if (selected?.state?.trim()) params.userState = selected.state.trim();
       } else if (filters?.city) {
         params.city = filters.city;
       } else {
@@ -319,11 +328,11 @@ export default function HomeScreen() {
       await reportPost(reportPostId, { reason, details });
       setReportPostId(null);
       Alert.alert(
-        'Report submitted',
-        'Thank you. Our team will review this report and take action if needed.'
+        t('home.reportSubmitted'),
+        t('home.reportSubmittedMessage')
       );
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not submit report');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('home.reportFailed'));
     } finally {
       setSubmittingReport(false);
     }
@@ -334,16 +343,18 @@ export default function HomeScreen() {
         <View style={{ height: headerHeight }} />
         <View style={styles.statsRow}>
           <Text style={styles.statsText}>
-            {posts.length} posts{location?.city ? ` near ${location.city}` : ''}
+            {location?.city
+              ? t('home.postsNear', { count: posts.length, city: phonetic(location.city) })
+              : t('home.postsCount', { count: posts.length })}
           </Text>
           <TouchableOpacity style={styles.sortBtn}>
-            <Text style={styles.sortText}>Newest</Text>
+            <Text style={styles.sortText}>{t('home.sortNewest')}</Text>
             <Ionicons name="chevron-down" size={16} color="#00A300" />
           </TouchableOpacity>
         </View>
       </View>
     ),
-    [headerHeight, posts.length, location?.city]
+    [headerHeight, posts.length, location?.city, t, phonetic]
   );
 
   const handleStickyHeaderLayout = React.useCallback((height: number) => {
@@ -390,7 +401,7 @@ export default function HomeScreen() {
             >
               <Ionicons name="location-outline" size={18} color="#C2410C" />
               <Text style={styles.locationPromptText}>
-                Set your location to see nearby posts and workers
+                {t('home.locationPrompt')}
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#C2410C" />
             </TouchableOpacity>
@@ -403,7 +414,7 @@ export default function HomeScreen() {
                 <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
                 <TextInput
                   ref={searchInputRef}
-                  placeholder="Search posts, jobs, service..."
+                  placeholder={t('home.searchPlaceholder')}
                   placeholderTextColor="#999"
                   style={styles.searchInput}
                   value={searchQuery}
@@ -527,20 +538,20 @@ export default function HomeScreen() {
           ListEmptyComponent={
             initialLoading && posts.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Loading...</Text>
+                <Text style={styles.emptyText}>{t('common.loading')}</Text>
               </View>
             ) : (
               <View style={styles.emptyContainer}>
                 <Ionicons name="search-outline" size={56} color="#ccc" />
                 <Text style={styles.emptyTitle}>
                   {searchQuery.trim() || activeFilters.category || activeFilters.city
-                    ? 'No results found'
-                    : 'No posts yet'}
+                    ? t('home.noResults')
+                    : t('home.noPosts')}
                 </Text>
                 <Text style={styles.emptyText}>
                   {searchQuery.trim() || activeFilters.category || activeFilters.city
-                    ? 'Try changing filters or searching something else'
-                    : 'Be the first to post in your area'}
+                    ? t('home.noResultsHint')
+                    : t('home.noPostsHint')}
                 </Text>
               </View>
             )
@@ -568,8 +579,8 @@ export default function HomeScreen() {
 
       <ReportModal
         visible={!!reportPostId}
-        title="Report post"
-        subtitle="Tell us why you are reporting this post. Our team will review it."
+        title={t('home.reportPostTitle')}
+        subtitle={t('home.reportPostSubtitle')}
         submitting={submittingReport}
         onClose={() => setReportPostId(null)}
         onSubmit={handleSubmitReport}

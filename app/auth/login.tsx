@@ -9,21 +9,35 @@ import { CustomButton } from '@/components/CustomButton';
 import { authService } from '@/services/auth.service';
 import { tokenStorage } from '@/services/tokenStorage';
 import { getPostAuthRoute } from '@/utils/locationNavigation';
+import { useAppLocation } from '@/contexts/AppLocationContext';
+import { useTranslation } from 'react-i18next';
+import type { User } from '@/types';
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { detectLocation } = useAppLocation();
+
+  const finishLogin = async (user: User) => {
+    const nextRoute = await getPostAuthRoute(user);
+    // Location setup detects on its own; otherwise refresh the saved location in the background.
+    if (nextRoute === '/(tabs)') {
+      void detectLocation().catch(() => undefined);
+    }
+    router.replace(nextRoute as any);
+  };
 
   useFocusEffect(
     useCallback(() => {
       void (async () => {
         const reason = await tokenStorage.getLogoutReason();
         if (reason === 'session_replaced') {
-          setError('Your account was logged in on another device. Please sign in again.');
+          setError(t('auth.sessionReplaced'));
           await tokenStorage.clearLogoutReason();
         } else {
           await tokenStorage.clearLogoutReason();
@@ -39,7 +53,7 @@ export default function LoginPage() {
 
   const handleSendOtp = async () => {
     if (phone.length !== 10) {
-      setError('Enter a valid 10-digit phone number');
+      setError(t('auth.invalidPhone'));
       return;
     }
 
@@ -48,8 +62,7 @@ export default function LoginPage() {
     try {
       const result = await authService.sendOtp({ phone, purpose: 'login' });
       if (result.bypassOtp && result.user) {
-        const nextRoute = await getPostAuthRoute(result.user);
-        router.replace(nextRoute as any);
+        await finishLogin(result.user);
         return;
       }
       setOtp('');
@@ -57,11 +70,11 @@ export default function LoginPage() {
     } catch (err: any) {
       const code = err.response?.data?.code;
       if (code === 'NOT_VERIFIED') {
-        setError('Registration is not complete. Please sign up and verify your phone number first.');
+        setError(t('auth.notVerified'));
       } else if (code === 'USER_NOT_FOUND') {
-        setError('No account found for this number. Please sign up first.');
+        setError(t('auth.userNotFound'));
       } else {
-        setError(err.response?.data?.message || 'Failed to send OTP');
+        setError(err.response?.data?.message || t('auth.sendOtpFailed'));
       }
     } finally {
       setLoading(false);
@@ -70,7 +83,7 @@ export default function LoginPage() {
 
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) {
-      setError('Enter the 6-digit OTP');
+      setError(t('auth.enterSixDigitOtp'));
       return;
     }
 
@@ -78,14 +91,13 @@ export default function LoginPage() {
     setError(null);
     try {
       const user = await authService.verifyOtp({ phone, otp });
-      const nextRoute = await getPostAuthRoute(user);
-      router.replace(nextRoute as any);
+      await finishLogin(user);
     } catch (err: any) {
       const code = err.response?.data?.code;
       if (code === 'NOT_VERIFIED') {
-        setError('Registration is not complete. Please sign up and verify your phone number first.');
+        setError(t('auth.notVerified'));
       } else {
-        setError(err.response?.data?.message || 'Invalid OTP');
+        setError(err.response?.data?.message || t('auth.invalidOtp'));
       }
     } finally {
       setLoading(false);
@@ -107,9 +119,9 @@ export default function LoginPage() {
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
               <Logo size={70} />
-              <Text style={styles.title}>Welcome back!</Text>
+              <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
               <Text style={styles.subtitle}>
-                {step === 'phone' ? 'Sign in with your phone number' : `OTP sent to +91 ${phone}`}
+                {step === 'phone' ? t('auth.signInWithPhone') : t('auth.otpSentTo', { phone })}
               </Text>
               {error && <Text style={styles.errorText}>{error}</Text>}
             </View>
@@ -118,7 +130,7 @@ export default function LoginPage() {
               {step === 'phone' ? (
                 <>
                   <CustomInput
-                    label="Phone Number"
+                    label={t('auth.phoneNumber')}
                     placeholder="9876543210"
                     value={phone}
                     onChangeText={handlePhoneChange}
@@ -126,31 +138,31 @@ export default function LoginPage() {
                     keyboardType="phone-pad"
                     maxLength={10}
                   />
-                  <CustomButton title="Send OTP" onPress={handleSendOtp} loading={loading} />
+                  <CustomButton title={t('auth.sendOtp')} onPress={handleSendOtp} loading={loading} />
                 </>
               ) : (
                 <>
                   <CustomInput
-                    label="Enter OTP"
-                    placeholder="6-digit OTP"
+                    label={t('auth.enterOtp')}
+                    placeholder={t('auth.otpPlaceholder')}
                     value={otp}
-                    onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                    onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 6))}
                     icon="lock-closed-outline"
                     keyboardType="numeric"
                     maxLength={6}
                   />
-                  <Text style={styles.hint}>Enter the OTP sent to your phone</Text>
-                  <CustomButton title="Verify & Sign In" onPress={handleVerifyOtp} loading={loading} />
+                  <Text style={styles.hint}>{t('auth.otpHint')}</Text>
+                  <CustomButton title={t('auth.verifyAndSignIn')} onPress={handleVerifyOtp} loading={loading} />
                   <TouchableOpacity onPress={handleSendOtp} style={styles.secondaryAction} disabled={loading}>
-                    <Text style={styles.footerText}>Resend OTP</Text>
+                    <Text style={styles.footerText}>{t('auth.resendOtp')}</Text>
                   </TouchableOpacity>
                 </>
               )}
 
               <View style={styles.footer}>
-                <Text style={styles.footerText}>Don't have an account? </Text>
+                <Text style={styles.footerText}>{t('auth.noAccount')} </Text>
                 <TouchableOpacity onPress={() => router.push('/auth/signup' as any)}>
-                  <Text style={styles.signUpText}>Sign Up</Text>
+                  <Text style={styles.signUpText}>{t('auth.signUp')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

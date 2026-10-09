@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Logo } from '@/components/Logo';
 import { CustomInput } from '@/components/CustomInput';
 import { CustomButton } from '@/components/CustomButton';
 import { authService } from '@/services/auth.service';
 import { getPostAuthRoute } from '@/utils/locationNavigation';
+import { useTranslation } from 'react-i18next';
+
+const NAME_MAX = 25;
 
 export default function SignupPage() {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'details' | 'otp'>('details');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -24,11 +30,15 @@ export default function SignupPage() {
 
   const handleSendOtp = async () => {
     if (!name.trim() || !email.trim() || !phone.trim()) {
-      setError('All fields are required');
+      setError(t('auth.allFieldsRequired'));
       return;
     }
     if (phone.length !== 10) {
-      setError('Phone number must be exactly 10 digits');
+      setError(t('auth.phoneMustBe10Digits'));
+      return;
+    }
+    if (!acceptedTerms) {
+      setError(t('auth.acceptTermsError'));
       return;
     }
 
@@ -46,9 +56,9 @@ export default function SignupPage() {
     } catch (err: any) {
       const code = err.response?.data?.code;
       if (code === 'USER_EXISTS') {
-        setError('An account already exists with this number. Please sign in instead.');
+        setError(t('auth.userExists'));
       } else {
-        setError(err.response?.data?.message || 'Failed to send OTP');
+        setError(err.response?.data?.message || t('auth.sendOtpFailed'));
       }
     } finally {
       setLoading(false);
@@ -57,11 +67,11 @@ export default function SignupPage() {
 
   const handleVerifyOtp = async () => {
     if (!name.trim() || !email.trim() || !phone.trim()) {
-      setError('All fields are required');
+      setError(t('auth.allFieldsRequired'));
       return;
     }
     if (otp.length !== 6) {
-      setError('Enter the 6-digit OTP');
+      setError(t('auth.enterSixDigitOtp'));
       return;
     }
 
@@ -75,13 +85,13 @@ export default function SignupPage() {
         email: email.trim().toLowerCase(),
       });
       const nextRoute = await getPostAuthRoute(user);
-      router.replace(nextRoute as any);
+      router.replace({ pathname: '/language', params: { onboarding: '1', next: nextRoute } } as any);
     } catch (err: any) {
       const code = err.response?.data?.code;
       if (code === 'USER_EXISTS') {
-        setError('An account already exists with this number. Please sign in instead.');
+        setError(t('auth.userExists'));
       } else {
-        setError(err.response?.data?.message || 'Invalid OTP');
+        setError(err.response?.data?.message || t('auth.invalidOtp'));
       }
     } finally {
       setLoading(false);
@@ -100,11 +110,11 @@ export default function SignupPage() {
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
               <Logo size={70} />
-              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.title}>{t('auth.createAccount')}</Text>
               <Text style={styles.subtitle}>
                 {step === 'details'
-                  ? 'Sign up with your phone number'
-                  : `OTP sent to +91 ${phone}. Enter OTP to finish registration.`}
+                  ? t('auth.signUpWithPhone')
+                  : t('auth.otpSentToFinishRegistration', { phone })}
               </Text>
               {error && <Text style={styles.errorText}>{error}</Text>}
             </View>
@@ -113,23 +123,23 @@ export default function SignupPage() {
               {step === 'details' ? (
                 <>
                   <CustomInput
-                    label="Full Name"
+                    label={t('auth.fullName')}
                     placeholder="Rahul Sharma"
                     value={name}
                     onChangeText={setName}
+                    maxLength={NAME_MAX}
                     icon="person-outline"
                   />
                   <CustomInput
-                    label="Email"
+                    label={t('auth.email')}
                     placeholder="rahul.sharma@gmail.com"
                     value={email}
                     onChangeText={setEmail}
                     icon="mail-outline"
                     keyboardType="email-address"
-                    autoCapitalize="none"
                   />
                   <CustomInput
-                    label="Phone Number"
+                    label={t('auth.phoneNumber')}
                     placeholder="9876543210"
                     value={phone}
                     onChangeText={handlePhoneChange}
@@ -137,21 +147,48 @@ export default function SignupPage() {
                     keyboardType="phone-pad"
                     maxLength={10}
                   />
-                  <CustomButton title="Send OTP" onPress={handleSendOtp} loading={loading} />
+                  <View style={styles.termsRow}>
+                    <TouchableOpacity
+                      onPress={() => setAcceptedTerms((v) => !v)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: acceptedTerms }}
+                    >
+                      <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                        {acceptedTerms && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+                    <Text style={styles.termsText}>
+                      <Text onPress={() => setAcceptedTerms((v) => !v)}>{t('auth.termsAgreePrefix')}</Text>
+                      <Text style={styles.termsLink} onPress={() => router.push('/terms' as any)}>
+                        {t('auth.termsAndConditions')}
+                      </Text>
+                      <Text onPress={() => setAcceptedTerms((v) => !v)}>{t('auth.termsAnd')}</Text>
+                      <Text style={styles.termsLink} onPress={() => router.push('/privacy' as any)}>
+                        {t('auth.privacyPolicy')}
+                      </Text>
+                    </Text>
+                  </View>
+                  <CustomButton
+                    title={t('auth.sendOtp')}
+                    onPress={handleSendOtp}
+                    loading={loading}
+                    disabled={!acceptedTerms}
+                  />
                 </>
               ) : (
                 <>
                   <CustomInput
-                    label="Enter OTP"
-                    placeholder="6-digit OTP"
+                    label={t('auth.enterOtp')}
+                    placeholder={t('auth.otpPlaceholder')}
                     value={otp}
-                    onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                    onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 6))}
                     icon="lock-closed-outline"
                     keyboardType="numeric"
                     maxLength={6}
                   />
-                  <Text style={styles.hint}>Enter the OTP sent to your phone</Text>
-                  <CustomButton title="Verify & Sign Up" onPress={handleVerifyOtp} loading={loading} />
+                  <Text style={styles.hint}>{t('auth.otpHint')}</Text>
+                  <CustomButton title={t('auth.verifyAndSignUp')} onPress={handleVerifyOtp} loading={loading} />
                   <TouchableOpacity
                     onPress={() => {
                       setStep('details');
@@ -159,18 +196,18 @@ export default function SignupPage() {
                       setError(null);
                     }}
                     style={styles.secondaryAction}>
-                    <Text style={styles.signUpText}>Edit details</Text>
+                    <Text style={styles.signUpText}>{t('auth.editDetails')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleSendOtp} style={styles.secondaryAction} disabled={loading}>
-                    <Text style={styles.footerText}>Resend OTP</Text>
+                    <Text style={styles.footerText}>{t('auth.resendOtp')}</Text>
                   </TouchableOpacity>
                 </>
               )}
 
               <View style={styles.footer}>
-                <Text style={styles.footerText}>Already have an account? </Text>
+                <Text style={styles.footerText}>{t('auth.haveAccount')} </Text>
                 <TouchableOpacity onPress={() => router.back()}>
-                  <Text style={styles.signUpText}>Sign In</Text>
+                  <Text style={styles.signUpText}>{t('auth.signIn')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -218,6 +255,38 @@ const styles = StyleSheet.create({
   form: {
     width: '100%',
     paddingHorizontal: 5,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: '#FF8C00',
+    borderColor: '#FF8C00',
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#475569',
+  },
+  termsLink: {
+    color: '#FF8C00',
+    fontWeight: '700',
   },
   hint: {
     fontSize: 13,

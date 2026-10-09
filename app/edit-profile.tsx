@@ -16,6 +16,7 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
@@ -24,6 +25,7 @@ import { handleAuthFailure } from '@/services/authSession';
 import { fetchLiveLocation, getLocationErrorMessage } from '@/services/location.service';
 
 const BIO_MAX = 29;
+const NAME_MAX = 25;
 const PLACEHOLDER_COLOR = '#9CA3AF';
 const sanitizeNoNumbers = (text: string, max?: number) => {
   const cleaned = String(text ?? '').replace(/[0-9]/g, '');
@@ -32,6 +34,7 @@ const sanitizeNoNumbers = (text: string, max?: number) => {
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -60,7 +63,7 @@ export default function EditProfileScreen() {
   const fetchProfile = async () => {
     try {
       const user = await authService.getProfile();
-      setName(sanitizeNoNumbers(user.name || ''));
+      setName(sanitizeNoNumbers(user.name || '', NAME_MAX));
       setEmail(user.email);
       setPhone(user.phone || '');
       setBio(sanitizeNoNumbers(user.bio || '', BIO_MAX));
@@ -79,7 +82,7 @@ export default function EditProfileScreen() {
       const redirected = await handleAuthFailure(err);
       if (redirected) return;
       console.error('Error fetching profile:', err);
-      setError('Failed to load profile data');
+      setError(t('editProfile.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -99,7 +102,7 @@ export default function EditProfileScreen() {
       setCoordinates(result.coordinates);
     } catch (err) {
       console.error('Location error:', err);
-      Alert.alert('Location failed', getLocationErrorMessage(err));
+      Alert.alert(t('editProfile.locationFailed'), getLocationErrorMessage(err));
     } finally {
       setFetchingLocation(false);
     }
@@ -128,13 +131,13 @@ export default function EditProfileScreen() {
       const raw = err.response?.data;
       const text = typeof raw === 'string' ? raw : raw?.message || err.message || '';
       if (status === 413 || /413|Request Entity Too Large/i.test(String(text))) {
-        setError('Photo is too large. Try a smaller image.');
+        setError(t('editProfile.photoTooLarge'));
       } else {
         setError(
           (typeof raw === 'object' && raw?.message) ||
             (typeof text === 'string' && !String(text).includes('<html')
               ? text
-              : 'Could not update profile picture')
+              : t('editProfile.photoUpdateFailed'))
         );
       }
     } finally {
@@ -149,7 +152,7 @@ export default function EditProfileScreen() {
       const updatedUser = await authService.removeProfilePicture();
       setProfilePicture(updatedUser.profilePicture || null);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Could not remove profile picture');
+      setError(err.response?.data?.message || t('editProfile.photoRemoveFailed'));
     } finally {
       setUploadingPhoto(false);
     }
@@ -174,24 +177,24 @@ export default function EditProfileScreen() {
     setSaving(true);
     setError(null);
     try {
-      const cleanName = sanitizeNoNumbers(name.trim());
+      const cleanName = sanitizeNoNumbers(name.trim(), NAME_MAX);
       const cleanArea = sanitizeNoNumbers(area.trim());
       const cleanCity = sanitizeNoNumbers(city.trim());
       const cleanState = sanitizeNoNumbers(stateName.trim());
       const cleanBio = sanitizeNoNumbers(bio.trim(), BIO_MAX);
 
       if (!cleanName) {
-        setError('Full name is required.');
+        setError(t('editProfile.nameRequired'));
         setSaving(false);
         return;
       }
       if (/[0-9]/.test(name) || /[0-9]/.test(area) || /[0-9]/.test(city) || /[0-9]/.test(stateName) || /[0-9]/.test(bio)) {
-        setError('Name, area, city, state, and bio cannot contain numbers.');
+        setError(t('editProfile.noNumbers'));
         setSaving(false);
         return;
       }
       if (cleanBio.length > BIO_MAX) {
-        setError(`Bio must be at most ${BIO_MAX} characters.`);
+        setError(t('editProfile.bioMax', { max: BIO_MAX }));
         setSaving(false);
         return;
       }
@@ -219,7 +222,7 @@ export default function EditProfileScreen() {
       router.back();
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      setError(err.response?.data?.message || 'Failed to update profile');
+      setError(err.response?.data?.message || t('editProfile.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -233,10 +236,10 @@ export default function EditProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={styles.headerTitle}>{t('editProfile.title')}</Text>
         <TouchableOpacity onPress={handleSave} disabled={saving || loading}>
           <Text style={[styles.saveText, (saving || loading) && { opacity: 0.5 }]}>
-            {saving ? '...' : 'Save'}
+            {saving ? '...' : t('common.save')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -268,49 +271,50 @@ export default function EditProfileScreen() {
                 )}
               </View>
             </TouchableOpacity>
-            <Text style={styles.changePhotoText}>Tap to change photo</Text>
+            <Text style={styles.changePhotoText}>{t('editProfile.tapToChangePhoto')}</Text>
           </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>{t('editProfile.fullName')}</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="person-outline" size={20} color="#000" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={name}
-                  onChangeText={(text) => setName(sanitizeNoNumbers(text))}
-                  placeholder="Full Name"
+                  onChangeText={(text) => setName(sanitizeNoNumbers(text, NAME_MAX))}
+                  maxLength={NAME_MAX}
+                  placeholder={t('editProfile.fullName')}
                   placeholderTextColor={PLACEHOLDER_COLOR}
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t('editProfile.email')}</Text>
               <View style={[styles.inputWrapper, styles.inputDisabled]}>
                 <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { color: '#999' }]}
                   value={email}
                   editable={false}
-                  placeholder="Email"
+                  placeholder={t('editProfile.email')}
                   placeholderTextColor={PLACEHOLDER_COLOR}
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.label}>{t('editProfile.phone')}</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="call-outline" size={20} color="#000" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={phone}
                   onChangeText={setPhone}
-                  placeholder="Phone"
+                  placeholder={t('editProfile.phone')}
                   placeholderTextColor={PLACEHOLDER_COLOR}
                   keyboardType="phone-pad"
                 />
@@ -318,27 +322,27 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Bio</Text>
+              <Text style={styles.label}>{t('editProfile.bio')}</Text>
               <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
                 <Ionicons name="information-circle-outline" size={22} color="#000" style={styles.textAreaIcon} />
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={bio}
                   onChangeText={(text) => setBio(sanitizeNoNumbers(text, BIO_MAX))}
-                  placeholder="Tell us about yourself"
+                  placeholder={t('editProfile.bioPlaceholder')}
                   placeholderTextColor={PLACEHOLDER_COLOR}
                   multiline
                   maxLength={BIO_MAX}
                 />
               </View>
               <Text style={styles.charHint}>
-                {bio.length}/{BIO_MAX} · letters only, no numbers
+                {t('editProfile.charHint', { current: bio.length, max: BIO_MAX })}
               </Text>
             </View>
 
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
-                <Text style={styles.label}>Location</Text>
+                <Text style={styles.label}>{t('editProfile.location')}</Text>
                 <TouchableOpacity
                   style={styles.liveLocationBtn}
                   onPress={fetchLiveLocationHandler}
@@ -349,49 +353,49 @@ export default function EditProfileScreen() {
                   ) : (
                     <>
                       <Ionicons name="navigate" size={14} color="#FF9500" />
-                      <Text style={styles.liveLocationText}>Use live location</Text>
+                      <Text style={styles.liveLocationText}>{t('editProfile.useLiveLocation')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
               </View>
 
               <View style={styles.inputGroupNested}>
-                <Text style={styles.label}>Area</Text>
+                <Text style={styles.label}>{t('editProfile.area')}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="location-outline" size={20} color="#000" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     value={area}
                     onChangeText={(text) => setArea(sanitizeNoNumbers(text))}
-                    placeholder="Area / locality"
+                    placeholder={t('editProfile.areaPlaceholder')}
                     placeholderTextColor={PLACEHOLDER_COLOR}
                   />
                 </View>
               </View>
 
               <View style={styles.inputGroupNested}>
-                <Text style={styles.label}>City</Text>
+                <Text style={styles.label}>{t('editProfile.city')}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="business-outline" size={20} color="#000" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     value={city}
                     onChangeText={(text) => setCity(sanitizeNoNumbers(text))}
-                    placeholder="City"
+                    placeholder={t('editProfile.city')}
                     placeholderTextColor={PLACEHOLDER_COLOR}
                   />
                 </View>
               </View>
 
               <View style={styles.inputGroupNested}>
-                <Text style={styles.label}>State</Text>
+                <Text style={styles.label}>{t('editProfile.state')}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="map-outline" size={20} color="#000" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     value={stateName}
                     onChangeText={(text) => setStateName(sanitizeNoNumbers(text))}
-                    placeholder="State"
+                    placeholder={t('editProfile.state')}
                     placeholderTextColor={PLACEHOLDER_COLOR}
                   />
                 </View>
@@ -406,7 +410,7 @@ export default function EditProfileScreen() {
             disabled={saving || loading}
           >
             <Text style={styles.saveBtnText}>
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? t('editProfile.saving') : t('editProfile.saveChanges')}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -421,9 +425,9 @@ export default function EditProfileScreen() {
         <View style={styles.removeModalOverlay}>
           <View style={styles.removeModalCard}>
             <Ionicons name="trash-outline" size={40} color="#EF4444" />
-            <Text style={styles.removeModalTitle}>Remove profile photo?</Text>
+            <Text style={styles.removeModalTitle}>{t('profile.removePhoto.title')}</Text>
             <Text style={styles.removeModalText}>
-              Your profile will show your initial instead.
+              {t('profile.removePhoto.message')}
             </Text>
             <View style={styles.removeConfirmActions}>
               <TouchableOpacity
@@ -431,7 +435,7 @@ export default function EditProfileScreen() {
                 onPress={() => setShowRemovePhotoConfirm(false)}
                 disabled={uploadingPhoto}
               >
-                <Text style={styles.removeCancelText}>Cancel</Text>
+                <Text style={styles.removeCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.removeConfirmBtn, uploadingPhoto && { opacity: 0.7 }]}
@@ -441,7 +445,7 @@ export default function EditProfileScreen() {
                 {uploadingPhoto ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.removeConfirmText}>Remove</Text>
+                  <Text style={styles.removeConfirmText}>{t('common.remove')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -452,34 +456,34 @@ export default function EditProfileScreen() {
       <Modal visible={showPhotoOptions} transparent animationType="slide">
         <View style={styles.photoModalOverlay}>
           <View style={styles.photoModalSheet}>
-            <Text style={styles.photoModalTitle}>Update profile photo</Text>
+            <Text style={styles.photoModalTitle}>{t('profile.photoOptions.title')}</Text>
             {profilePicture ? (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={handleViewPhoto}>
                 <Ionicons name="eye-outline" size={22} color="#FF9500" />
-                <Text style={styles.photoOptionText}>View Photo</Text>
+                <Text style={styles.photoOptionText}>{t('profile.photoOptions.view')}</Text>
               </TouchableOpacity>
             ) : null}
             {Platform.OS !== 'web' && (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={pickFromCamera}>
                 <Ionicons name="camera-outline" size={22} color="#FF9500" />
-                <Text style={styles.photoOptionText}>Take Photo</Text>
+                <Text style={styles.photoOptionText}>{t('profile.photoOptions.take')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.photoOptionBtn} onPress={pickFromGallery}>
               <Ionicons name="images-outline" size={22} color="#FF9500" />
-              <Text style={styles.photoOptionText}>Choose from Gallery</Text>
+              <Text style={styles.photoOptionText}>{t('profile.photoOptions.gallery')}</Text>
             </TouchableOpacity>
             {profilePicture ? (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={handleRemovePhoto}>
                 <Ionicons name="trash-outline" size={22} color="#EF4444" />
-                <Text style={[styles.photoOptionText, styles.photoRemoveText]}>Remove Photo</Text>
+                <Text style={[styles.photoOptionText, styles.photoRemoveText]}>{t('profile.photoOptions.remove')}</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
               style={styles.photoCancelBtn}
               onPress={() => setShowPhotoOptions(false)}
             >
-              <Text style={styles.photoCancelText}>Cancel</Text>
+              <Text style={styles.photoCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

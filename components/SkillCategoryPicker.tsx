@@ -10,6 +10,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import type { Category } from '@/services/category.service';
 import { filterValidSkillIds, normalizeSkillId } from '@/utils/skillIds';
 import {
@@ -30,6 +32,8 @@ export function SkillCategoryPicker({
   onChange,
   disabled,
 }: Props) {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -86,7 +90,7 @@ export function SkillCategoryPicker({
         {selectedCategory ? (
           <View style={styles.miniBadge}>
             <Ionicons name={(selectedCategory.icon as any) || 'briefcase-outline'} size={14} color="#FF9500" />
-            <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{selectedCategory.name}</Text>
+            <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{phonetic(selectedCategory.name)}</Text>
             <TouchableOpacity
               onPress={() => !disabled && onChange([])}
               style={styles.removeIcon}
@@ -97,7 +101,7 @@ export function SkillCategoryPicker({
             </TouchableOpacity>
           </View>
         ) : (
-          <Text style={[styles.pickerText, preventAndroidTextClip()]}>Select Category</Text>
+          <Text style={[styles.pickerText, preventAndroidTextClip()]}>{t('skillPicker.selectCategory')}</Text>
         )}
         <Ionicons name="chevron-down" size={20} color="#999" />
       </TouchableOpacity>
@@ -111,7 +115,7 @@ export function SkillCategoryPicker({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
+              <Text style={styles.modalTitle}>{t('skillPicker.selectCategory')}</Text>
               <TouchableOpacity onPress={closeModal}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
@@ -121,7 +125,7 @@ export function SkillCategoryPicker({
               <Ionicons name="search" size={18} color="#999" style={styles.categorySearchIcon} />
               <TextInput
                 style={styles.categorySearchInput}
-                placeholder="Search categories..."
+                placeholder={t('skillPicker.searchPlaceholder')}
                 placeholderTextColor="#999"
                 value={search}
                 onChangeText={setSearch}
@@ -142,7 +146,7 @@ export function SkillCategoryPicker({
               contentContainerStyle={styles.modalList}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
-                <Text style={styles.categoryEmptyText}>No categories found</Text>
+                <Text style={styles.categoryEmptyText}>{t('skillPicker.noResults')}</Text>
               }
               renderItem={({ item }) => {
                 const catId = normalizeSkillId(item._id);
@@ -155,7 +159,7 @@ export function SkillCategoryPicker({
                     <View style={styles.categoryIconContainer}>
                       <Ionicons name={(item.icon as any) || 'briefcase-outline'} size={20} color="#FF9500" />
                     </View>
-                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{phonetic(item.name)}</Text>
                     {isSelected ? (
                       <Ionicons name="checkmark-circle" size={24} color="#00A300" />
                     ) : null}

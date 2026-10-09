@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { jobService } from '@/services/job.service';
 import { categoryService, Category } from '@/services/category.service';
 import { CustomInput } from '@/components/CustomInput';
@@ -26,6 +28,8 @@ import {
 } from '@/utils/androidTextFix';
 
 export default function EditJobScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
   const { id } = useLocalSearchParams();
   
@@ -40,6 +44,11 @@ export default function EditJobScreen() {
   const [price, setPrice] = useState('');
   const [location, setLocation] = useState('');
   const [genderRequirement, setGenderRequirement] = useState<'Any' | 'Male' | 'Female'>('Any');
+  const genderLabels = {
+    Any: t('editJob.genderAny'),
+    Male: t('editJob.genderMale'),
+    Female: t('editJob.genderFemale'),
+  };
   const [minAge, setMinAge] = useState('');
   const [maxAge, setMaxAge] = useState('');
 
@@ -82,7 +91,7 @@ export default function EditJobScreen() {
       
     } catch (err) {
       console.error('Error fetching data:', err);
-      Alert.alert('Error', 'Failed to load job details');
+      Alert.alert(t('common.error'), t('editJob.loadFailed'));
       router.back();
     } finally {
       setFetching(false);
@@ -91,14 +100,14 @@ export default function EditJobScreen() {
 
   const handleUpdate = async () => {
     if (!title || selectedCategories.length === 0 || !location || !description) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert(t('common.error'), t('editJob.fillRequired'));
       return;
     }
 
     setLoading(true);
     try {
       if ((minAge && Number(minAge) < AGE_MIN) || (maxAge && Number(maxAge) < AGE_MIN)) {
-        Alert.alert('Invalid age', `Age must be ${AGE_MIN} or older.`);
+        Alert.alert(t('editJob.invalidAge'), t('editJob.minAge', { min: AGE_MIN }));
         setLoading(false);
         return;
       }
@@ -119,10 +128,10 @@ export default function EditJobScreen() {
           maxAge: finalizeAge(maxAge),
         }
       });
-      Alert.alert('Success', 'Job post updated successfully!');
+      Alert.alert(t('common.success'), t('editJob.updateSuccess'));
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to update post');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('editJob.updateFailed'));
     } finally {
       setLoading(false);
     }
@@ -145,23 +154,24 @@ export default function EditJobScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Job Post</Text>
+        <Text style={styles.headerTitle}>{t('editJob.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>General Information</Text>
+        <Text style={styles.sectionTitle}>{t('editJob.generalInfo')}</Text>
         
         <CustomInput
-          label="Title *"
-          placeholder="e.g. Need a Plumber for kitchen leak"
+          label={t('editJob.titleLabel')}
+          placeholder={t('editJob.titlePlaceholder')}
           value={title}
           onChangeText={setTitle}
+          maxLength={20}
         />
 
         {/* Requirements */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Gender Requirement</Text>
+          <Text style={styles.label}>{t('editJob.genderRequirement')}</Text>
           <View style={styles.chipRow}>
             {(['Any', 'Male', 'Female'] as const).map((g) => (
               <TouchableOpacity
@@ -169,18 +179,18 @@ export default function EditJobScreen() {
                 style={[styles.reqChip, genderRequirement === g && styles.reqChipActive]}
                 onPress={() => setGenderRequirement(g)}
               >
-                <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
+                <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{genderLabels[g]}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Age Requirement</Text>
+          <Text style={styles.label}>{t('editJob.ageRequirement')}</Text>
           <View style={styles.row}>
             <View style={styles.flex1}>
               <TextInput
-                placeholder="Min (Any)"
+                placeholder={t('editJob.minAgePlaceholder')}
                 style={styles.smallInput}
                 value={minAge}
                 onChangeText={(t) => setMinAge(sanitizeAgeInput(t))}
@@ -191,7 +201,7 @@ export default function EditJobScreen() {
             </View>
             <View style={styles.flex1}>
               <TextInput
-                placeholder="Max (Any)"
+                placeholder={t('editJob.maxAgePlaceholder')}
                 style={styles.smallInput}
                 value={maxAge}
                 onChangeText={(t) => setMaxAge(sanitizeAgeInput(t))}
@@ -204,10 +214,10 @@ export default function EditJobScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description *</Text>
+          <Text style={styles.label}>{t('editJob.descriptionLabel')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Describe the job in detail..."
+            placeholder={t('editJob.descriptionPlaceholder')}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -216,7 +226,7 @@ export default function EditJobScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Categories *</Text>
+          <Text style={styles.label}>{t('editJob.categoriesLabel')}</Text>
           <TouchableOpacity 
             style={styles.pickerTrigger}
             onPress={() => setShowCategoryModal(true)}
@@ -226,7 +236,7 @@ export default function EditJobScreen() {
               {selectedCategories.length > 0 ? (
                 selectedCategories.map(cat => (
                   <View key={cat._id} style={styles.miniBadge}>
-                    <Text style={styles.miniBadgeText}>{cat.name}</Text>
+                    <Text style={styles.miniBadgeText}>{phonetic(cat.name)}</Text>
                     <TouchableOpacity 
                       onPress={() => setSelectedCategories(selectedCategories.filter(c => c._id !== cat._id))}
                       style={styles.removeIcon}
@@ -236,7 +246,7 @@ export default function EditJobScreen() {
                   </View>
                 ))
               ) : (
-                <Text style={styles.pickerText}>Select Categories</Text>
+                <Text style={styles.pickerText}>{t('editJob.selectCategories')}</Text>
               )}
             </View>
             <Ionicons name="chevron-down" size={20} color="#999" />
@@ -246,7 +256,7 @@ export default function EditJobScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 10 }}>
             <CustomInput
-              label="Budget (₹)"
+              label={t('editJob.budgetLabel')}
               placeholder="0"
               value={price}
               onChangeText={setPrice}
@@ -255,8 +265,8 @@ export default function EditJobScreen() {
           </View>
           <View style={{ flex: 1.5 }}>
             <CustomInput
-              label="Location *"
-              placeholder="Area, Street"
+              label={t('editJob.locationLabel')}
+              placeholder={t('editJob.locationPlaceholder')}
               value={location}
               onChangeText={setLocation}
             />
@@ -271,7 +281,7 @@ export default function EditJobScreen() {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitBtnText}>Update Post</Text>
+            <Text style={styles.submitBtnText}>{t('editJob.updatePost')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -286,7 +296,7 @@ export default function EditJobScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
+              <Text style={styles.modalTitle}>{t('editJob.selectCategory')}</Text>
               <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
@@ -312,7 +322,7 @@ export default function EditJobScreen() {
                     <View style={styles.categoryIconContainer}>
                       <Ionicons name={item.icon as any} size={20} color="#FF9500" />
                     </View>
-                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{phonetic(item.name)}</Text>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={24} color="#00A300" />
                     )}
@@ -450,9 +460,6 @@ const styles = StyleSheet.create({
   skillTextSelected: {
     color: '#fff',
     fontWeight: 'bold',
-  },
-  row: {
-    flexDirection: 'row',
   },
   submitBtn: {
     backgroundColor: '#FF9500',

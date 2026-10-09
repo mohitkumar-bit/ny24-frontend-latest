@@ -15,8 +15,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView } from '@/utils/keyboardController';
-import { REPORT_REASONS } from '@/constants/reportReasons';
+import { REPORT_REASONS, reportReasonLabel, type ReportReason } from '@/constants/reportReasons';
 
 type ReportModalProps = {
   visible: boolean;
@@ -35,8 +36,9 @@ export function ReportModal({
   onClose,
   onSubmit,
 }: ReportModalProps) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const [reason, setReason] = useState(REPORT_REASONS[0]);
+  const [reason, setReason] = useState<ReportReason>(REPORT_REASONS[0]);
   const [details, setDetails] = useState('');
   const [reasonDropdownOpen, setReasonDropdownOpen] = useState(false);
   const [dropdownLayout, setDropdownLayout] = useState({ top: 0, left: 0, width: 0 });
@@ -74,7 +76,7 @@ export function ReportModal({
     };
   }, [visible]);
 
-  const handleSelectReason = (option: string) => {
+  const handleSelectReason = (option: ReportReason) => {
     setReason(option);
     setReasonDropdownOpen(false);
   };
@@ -144,7 +146,7 @@ export function ReportModal({
             </View>
 
             <View style={styles.form}>
-              <Text style={styles.fieldLabel}>Reason</Text>
+              <Text style={styles.fieldLabel}>{t('report.reason')}</Text>
               <View style={styles.dropdownContainer} ref={triggerRef} collapsable={false}>
                 <TouchableOpacity
                   style={[
@@ -154,7 +156,7 @@ export function ReportModal({
                   onPress={toggleReasonDropdown}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.dropdownTriggerText}>{reason}</Text>
+                  <Text style={styles.dropdownTriggerText}>{reportReasonLabel(reason)}</Text>
                   <Ionicons
                     name={reasonDropdownOpen ? 'chevron-up' : 'chevron-down'}
                     size={20}
@@ -163,10 +165,10 @@ export function ReportModal({
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.fieldLabel}>Additional details (optional)</Text>
+              <Text style={styles.fieldLabel}>{t('report.detailsLabel')}</Text>
               <TextInput
                 style={styles.detailsInput}
-                placeholder="Tell us more..."
+                placeholder={t('report.detailsPlaceholder')}
                 placeholderTextColor="#94A3B8"
                 value={details}
                 onChangeText={setDetails}
@@ -179,7 +181,7 @@ export function ReportModal({
 
             <View style={styles.actions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={submitting}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.submitBtn}
@@ -189,7 +191,7 @@ export function ReportModal({
                 {submitting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.submitText}>Submit report</Text>
+                  <Text style={styles.submitText}>{t('report.submitReport')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -233,7 +235,7 @@ export function ReportModal({
                         reason === option && styles.dropdownOptionTextActive,
                       ]}
                     >
-                      {option}
+                      {reportReasonLabel(option)}
                     </Text>
                     {reason === option ? (
                       <Ionicons name="checkmark" size={18} color="#FF9500" />

@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Sta
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 export default function TermsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -22,50 +24,50 @@ export default function TermsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Terms & Conditions</Text>
+          <Text style={styles.headerTitle}>{t('terms.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.lastUpdated}>Last Updated: June 2026</Text>
+          <Text style={styles.lastUpdated}>{t('terms.lastUpdated')}</Text>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
+            <Text style={styles.sectionTitle}>{t('terms.sections.acceptance.title')}</Text>
             <Text style={styles.text}>
-              By accessing and using the gigSEVA application, you agree to comply with and be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the app.
+              {t('terms.sections.acceptance.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>2. User Accounts</Text>
+            <Text style={styles.sectionTitle}>{t('terms.sections.accounts.title')}</Text>
             <Text style={styles.text}>
-              You are responsible for maintaining the confidentiality of your account credentials. Any activity under your account is your responsibility. You must be at least 18 years old to use this service.
+              {t('terms.sections.accounts.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>3. Service Rules</Text>
+            <Text style={styles.sectionTitle}>{t('terms.sections.serviceRules.title')}</Text>
             <Text style={styles.text}>
-              Workers must provide accurate information regarding their skills and experience. Job seekers must provide valid service requests. We reserve the right to suspend accounts that violate our community guidelines.
+              {t('terms.sections.serviceRules.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>4. Payments</Text>
+            <Text style={styles.sectionTitle}>{t('terms.sections.payments.title')}</Text>
             <Text style={styles.text}>
-              gigSEVA provides a platform for connection. Payment terms are negotiated directly between the worker and the client unless specified otherwise. We are not responsible for payment disputes.
+              {t('terms.sections.payments.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>5. Limitation of Liability</Text>
+            <Text style={styles.sectionTitle}>{t('terms.sections.liability.title')}</Text>
             <Text style={styles.text}>
-              gigSEVA shall not be liable for any direct, indirect, incidental, or consequential damages resulting from the use or inability to use our services.
+              {t('terms.sections.liability.body')}
             </Text>
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Contact legal@gigseva.com for inquiries.</Text>
+            <Text style={styles.footerText}>{t('terms.footer')}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

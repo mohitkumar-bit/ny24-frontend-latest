@@ -3,7 +3,7 @@
     "name": "gigseva",
     "slug": "gigseva",
     "owner": "tripledots123",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "scheme": "gigseva",
@@ -24,6 +24,7 @@
     },
     "android": {
       "package": "com.tripledots.geegseva",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#FF8C00",
         "foregroundImage": "./assets/logo.png"
@@ -71,7 +72,7 @@
         {
           "photosPermission": "Allow gigSEVA to access your photos for posts, profile, and chat.",
           "cameraPermission": "Allow gigSEVA to use your camera to capture photos for your profile and verification.",
-          "microphonePermission": false
+          "microphonePermission": "Allow gigSEVA to record voice messages in chat."
         }
       ],
       [

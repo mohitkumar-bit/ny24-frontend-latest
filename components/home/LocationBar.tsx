@@ -1,7 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
+import i18n from '@/i18n';
 import { useAppLocation } from '@/contexts/AppLocationContext';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { StoredAppLocation } from '@/services/locationStorage';
 
 type LocationBarProps = {
@@ -9,7 +13,7 @@ type LocationBarProps = {
 };
 
 export function formatLocationDisplay(location: StoredAppLocation | null): string {
-  if (!location) return 'Set your location';
+  if (!location) return i18n.t('home.setYourLocation');
 
   const city = location.city?.trim();
   const parts = location.display
@@ -28,9 +32,12 @@ export function formatLocationDisplay(location: StoredAppLocation | null): strin
 }
 
 export function LocationBar({ onPress }: LocationBarProps) {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
+  const phonetic = usePhonetic();
   const { location, loading } = useAppLocation();
 
-  const label = loading ? 'Detecting location...' : formatLocationDisplay(location);
+  const label = loading ? t('home.detectingLocation') : phonetic(formatLocationDisplay(location));
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
@@ -38,7 +45,7 @@ export function LocationBar({ onPress }: LocationBarProps) {
         <Ionicons name="location" size={18} color="#00A300" />
       </View>
       <View style={styles.textWrap}>
-        <Text style={styles.label}>Your location</Text>
+        <Text style={styles.label}>{t('home.yourLocation')}</Text>
         <View style={styles.valueRow}>
           {loading ? (
             <ActivityIndicator size="small" color="#00A300" style={styles.loader} />
@@ -53,7 +60,7 @@ export function LocationBar({ onPress }: LocationBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',

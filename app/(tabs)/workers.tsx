@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Pressabl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { workerService } from '@/services/worker.service';
 import { CategoryList } from '@/components/home/CategoryList';
 import { WorkerCard, Worker } from '@/components/workers/WorkerCard';
@@ -16,6 +18,8 @@ import type { Category } from '@/services/category.service';
 import { buildNearbyParams } from '@/utils/nearbyParams';
 
 const WorkersScreen = () => {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const { location } = useAppLocation();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,13 +153,15 @@ const WorkersScreen = () => {
       <View style={styles.listHeader}>
         <View style={styles.resultsRow}>
           <Text style={styles.resultsCount}>
-            {workers.length} workers{location?.city ? ` in ${location.city}` : ' available'}
+            {location?.city
+              ? t('workers.countIn', { count: workers.length, city: phonetic(location.city) })
+              : t('workers.countAvailable', { count: workers.length })}
           </Text>
         </View>
 
         {featuredWorkers.length > 0 && (
           <View style={styles.featuredSection}>
-            <Text style={styles.featuredTitle}>Featured</Text>
+            <Text style={styles.featuredTitle}>{t('workers.featured')}</Text>
             {featuredWorkers.slice(0, 3).map((w) => (
               <WorkerCard key={w._id} worker={w} />
             ))}
@@ -165,7 +171,7 @@ const WorkersScreen = () => {
         {featuredWorkers.length > 0 && <View style={styles.featuredDivider} />}
 
         {featuredWorkers.length > 0 && organicWorkers.length > 0 && (
-          <Text style={styles.allTitle}>All</Text>
+          <Text style={styles.allTitle}>{t('workers.all')}</Text>
         )}
       </View>
     );
@@ -203,7 +209,7 @@ const WorkersScreen = () => {
                 <Ionicons name="search-outline" size={22} color="#999" style={styles.searchIcon} />
                 <TextInput
                   ref={searchInputRef}
-                  placeholder="Search by category, city, name..."
+                  placeholder={t('workers.searchPlaceholder')}
                   placeholderTextColor="#999"
                   style={styles.searchInput}
                   value={searchQuery}
@@ -318,9 +324,9 @@ const WorkersScreen = () => {
             !loading && workers.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="search-outline" size={56} color="#ccc" />
-                <Text style={styles.emptyTitle}>No results found</Text>
+                <Text style={styles.emptyTitle}>{t('workers.noResults')}</Text>
                 <Text style={styles.emptyText}>
-                  Try changing filters or searching another city
+                  {t('workers.noResultsHint')}
                 </Text>
               </View>
             ) : null

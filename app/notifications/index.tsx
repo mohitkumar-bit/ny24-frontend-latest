@@ -13,6 +13,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AppNotification, notificationService } from '@/services/notification.service';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString(undefined, {
@@ -30,6 +32,8 @@ const getIconName = (type: AppNotification['type']) => {
 };
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const router = useRouter();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,14 +80,16 @@ export default function NotificationsScreen() {
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Notifications</Text>
+            <Text style={styles.headerTitle}>{t('notifications.title')}</Text>
             <Text style={styles.headerSubtitle}>
-              {notifications.length} notification{notifications.length === 1 ? '' : 's'}
+              {notifications.length === 1
+                ? t('notifications.countSingle', { total: notifications.length })
+                : t('notifications.countMultiple', { total: notifications.length })}
             </Text>
           </View>
           {hasUnread && (
             <TouchableOpacity onPress={handleMarkAllRead} style={styles.markAllBtn}>
-              <Text style={styles.markAllText}>Mark all read</Text>
+              <Text style={styles.markAllText}>{t('notifications.markAllRead')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -110,8 +116,8 @@ export default function NotificationsScreen() {
             ListEmptyComponent={
               <View style={styles.centered}>
                 <Ionicons name="notifications-off-outline" size={48} color="#CBD5E1" />
-                <Text style={styles.emptyTitle}>No notifications yet</Text>
-                <Text style={styles.emptySubtitle}>Updates from gigSEVA will appear here</Text>
+                <Text style={styles.emptyTitle}>{t('notifications.emptyTitle')}</Text>
+                <Text style={styles.emptySubtitle}>{t('notifications.emptySubtitle')}</Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -149,7 +155,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',

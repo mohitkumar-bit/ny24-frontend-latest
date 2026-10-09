@@ -4,6 +4,7 @@ import { buildProfileImageFormData } from './formDataUpload';
 import { forceLogout } from './authSession';
 import { tokenStorage } from './tokenStorage';
 import { registerAndSyncPushToken } from './pushRegistration';
+import { applyAccountLanguage } from './languageSync';
 import type { LoginCredentials, SignUpCredentials, SendOtpPayload, VerifyOtpPayload } from '@/types';
 
 export const authService = {
@@ -15,6 +16,7 @@ export const authService = {
     await tokenStorage.setTokens(accessToken, refreshToken);
 
     registerAndSyncPushToken().catch(() => {});
+    await applyAccountLanguage(user);
 
     return user;
   },
@@ -27,6 +29,7 @@ export const authService = {
     await tokenStorage.setTokens(accessToken, refreshToken);
 
     registerAndSyncPushToken().catch(() => {});
+    await applyAccountLanguage(user);
 
     return user;
   },
@@ -47,6 +50,7 @@ export const authService = {
     if (data.bypassOtp && data.accessToken && data.refreshToken) {
       await tokenStorage.setTokens(data.accessToken, data.refreshToken);
       registerAndSyncPushToken().catch(() => {});
+      await applyAccountLanguage(data.user);
     }
 
     return data;
@@ -60,6 +64,7 @@ export const authService = {
     await tokenStorage.setTokens(accessToken, refreshToken);
 
     registerAndSyncPushToken().catch(() => {});
+    await applyAccountLanguage(user);
 
     return user;
   },
@@ -76,7 +81,9 @@ export const authService = {
 
   async getProfile() {
     const response = await api.get('/auth/me');
-    return response.data.user;
+    const user = response.data.user;
+    await applyAccountLanguage(user);
+    return user;
   },
 
   async updateProfile(data: {

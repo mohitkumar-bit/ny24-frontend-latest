@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Switch, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { workerService } from '@/services/worker.service';
@@ -10,7 +12,22 @@ import { authService } from '@/services/auth.service';
 
 export default function WorkerProfileScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const insets = useSafeAreaInsets();
+
+  const genderLabel = (value: string) => {
+    switch (value) {
+      case 'Male':
+        return t('gender.male');
+      case 'Female':
+        return t('gender.female');
+      case 'Other':
+        return t('gender.other');
+      default:
+        return value;
+    }
+  };
   const [profile, setProfile] = useState<any>(null);
   const [isUserVerified, setIsUserVerified] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,14 +61,14 @@ export default function WorkerProfileScreen() {
         setProfile((prev: any) => ({ ...prev, ...response.profile }));
       } else {
         setProfile(oldProfile);
-        Alert.alert('Error', 'Failed to update availability');
+        Alert.alert(t('common.error'), t('workerProfile.updateAvailabilityFailed'));
       }
     } catch (error: any) {
       setProfile(oldProfile);
       console.error('Error updating availability:', error);
       Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Failed to update availability'
+        t('common.error'),
+        error.response?.data?.message || t('workerProfile.updateAvailabilityFailed')
       );
     }
   };
@@ -64,7 +81,7 @@ export default function WorkerProfileScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Working Profile</Text>
+            <Text style={styles.headerTitle}>{t('workerProfile.title')}</Text>
             <View style={styles.headerSpacer} />
           </View>
           <View style={styles.content}>
@@ -96,7 +113,7 @@ export default function WorkerProfileScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Working Profile</Text>
+          <Text style={styles.headerTitle}>{t('workerProfile.title')}</Text>
           <TouchableOpacity onPress={() => router.push('/worker-register' as any)} style={styles.headerActionBtn}>
             <Ionicons name="create-outline" size={24} color="#000" />
           </TouchableOpacity>
@@ -110,16 +127,16 @@ export default function WorkerProfileScreen() {
           <View style={styles.mainCard}>
             <View style={styles.titleRow}>
               <View>
-                <Text style={styles.profileTitle}>{profile?.title}</Text>
+                <Text style={styles.profileTitle}>{phonetic(profile?.title)}</Text>
                 {isUserVerified && (
                   <View style={styles.verifiedBadge}>
                     <Ionicons name="checkmark-circle" size={16} color="#00A300" />
-                    <Text style={styles.verifiedText}>Verified Professional</Text>
+                    <Text style={styles.verifiedText}>{t('workerProfile.verifiedProfessional')}</Text>
                   </View>
                 )}
               </View>
               <View style={styles.rateCard}>
-                <Text style={styles.rateLabel}>Hourly Rate</Text>
+                <Text style={styles.rateLabel}>{t('workerProfile.hourlyRate')}</Text>
                 <Text style={styles.rateValue}>₹{profile?.hourlyRate}</Text>
               </View>
             </View>
@@ -129,7 +146,7 @@ export default function WorkerProfileScreen() {
                 <View style={styles.statValueSlot}>
                   <Text style={styles.statVal}>{profile?.experience}</Text>
                 </View>
-                <Text style={styles.statLab}>Years Exp.</Text>
+                <Text style={styles.statLab}>{t('workerProfile.yearsExp')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
@@ -143,27 +160,27 @@ export default function WorkerProfileScreen() {
                     style={Platform.OS === 'ios' ? styles.iosSwitch : undefined}
                   />
                 </View>
-                <Text style={styles.statLab}>{profile?.availability !== false ? 'Available' : 'Busy'}</Text>
+                <Text style={styles.statLab}>{profile?.availability !== false ? t('workerProfile.available') : t('workerProfile.busy')}</Text>
               </View>
             </View>
           </View>
 
           {/* About Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>About Me</Text>
+            <Text style={styles.sectionHeader}>{t('workerProfile.aboutMe')}</Text>
             <View style={styles.bioCard}>
-              <Text style={styles.bioText}>{profile?.description}</Text>
+              <Text style={styles.bioText}>{phonetic(profile?.description)}</Text>
             </View>
           </View>
 
           {/* Skills Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Skills & Categories</Text>
+            <Text style={styles.sectionHeader}>{t('workerProfile.skillsCategories')}</Text>
             <View style={styles.skillsGrid}>
               {profile?.skills?.map((skill: any) => (
                 <View key={skill._id} style={styles.skillItem}>
                   <Ionicons name={skill.icon} size={20} color="#FF9500" />
-                  <Text style={styles.skillName}>{skill.name}</Text>
+                  <Text style={styles.skillName}>{phonetic(skill.name)}</Text>
                 </View>
               ))}
             </View>
@@ -171,20 +188,22 @@ export default function WorkerProfileScreen() {
 
           {/* Location Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Working Location</Text>
+            <Text style={styles.sectionHeader}>{t('workerProfile.workingLocation')}</Text>
             <View style={styles.locationCard}>
               <Ionicons name="location" size={24} color="#FF9500" />
               <View style={styles.locationInfo}>
-                <Text style={styles.addressText}>{profile?.location?.address}</Text>
+                <Text style={styles.addressText}>{phonetic(profile?.location?.address)}</Text>
                 <Text style={styles.cityText}>
-                  {[
-                    profile?.location?.city,
-                    profile?.location?.state,
-                    profile?.location?.pincode,
-                    profile?.location?.country,
-                  ]
-                    .filter(Boolean)
-                    .join(', ')}
+                  {phonetic(
+                    [
+                      profile?.location?.city,
+                      profile?.location?.state,
+                      profile?.location?.pincode,
+                      profile?.location?.country,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')
+                  )}
                 </Text>
               </View>
             </View>
@@ -192,20 +211,20 @@ export default function WorkerProfileScreen() {
 
           {/* Personal Info Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Personal Information</Text>
+            <Text style={styles.sectionHeader}>{t('workerProfile.personalInfo')}</Text>
             <View style={styles.infoGrid}>
               <View style={styles.infoBox}>
                 <Ionicons name="calendar-outline" size={20} color="#FF9500" />
                 <View>
-                  <Text style={styles.infoLabel}>Age</Text>
-                  <Text style={styles.infoValue}>{profile?.age || 'N/A'}</Text>
+                  <Text style={styles.infoLabel}>{t('workerProfile.age')}</Text>
+                  <Text style={styles.infoValue}>{profile?.age || t('workerProfile.notAvailable')}</Text>
                 </View>
               </View>
               <View style={styles.infoBox}>
                 <Ionicons name="person-outline" size={20} color="#FF9500" />
                 <View>
-                  <Text style={styles.infoLabel}>Gender</Text>
-                  <Text style={styles.infoValue}>{profile?.gender || 'N/A'}</Text>
+                  <Text style={styles.infoLabel}>{t('workerProfile.gender')}</Text>
+                  <Text style={styles.infoValue}>{profile?.gender ? genderLabel(profile.gender) : t('workerProfile.notAvailable')}</Text>
                 </View>
               </View>
               <View style={[styles.infoBox, { width: '100%', marginTop: 10 }]}>
@@ -215,9 +234,9 @@ export default function WorkerProfileScreen() {
                   color="#FF9500" 
                 />
                 <View>
-                  <Text style={styles.infoLabel}>Service Area</Text>
+                  <Text style={styles.infoLabel}>{t('workerProfile.serviceArea')}</Text>
                   <Text style={styles.infoValue}>
-                    {profile?.interestedInLongDistance ? 'Interested in Long Distance' : 'Local Area Only'}
+                    {profile?.interestedInLongDistance ? t('workerProfile.longDistance') : t('workerProfile.localOnly')}
                   </Text>
                 </View>
               </View>
@@ -229,7 +248,7 @@ export default function WorkerProfileScreen() {
             style={styles.editBtn}
             onPress={() => router.push('/worker-register' as any)}
           >
-            <Text style={styles.editBtnText}>Edit Working Profile</Text>
+            <Text style={styles.editBtnText}>{t('workerProfile.editProfile')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>

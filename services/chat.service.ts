@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import i18n from '@/i18n';
 import { api, postMultipart } from './api';
 import { buildChatMediaFormData } from './formDataUpload';
 
@@ -7,9 +8,14 @@ export type SendMessageParams = {
   conversationId?: string;
   text?: string;
   mediaUrl?: string;
-  messageType?: 'text' | 'image' | 'audio';
+  messageType?: 'text' | 'image' | 'audio' | 'location';
   mediaDuration?: number;
+  replyToId?: string;
+  location?: { lat: number; lng: number; address?: string };
 };
+
+export const googleMapsUrl = (lat: number, lng: number) =>
+  `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
 export const sendMessage = async (params: SendMessageParams) => {
   const response = await api.post('/chat/send', params);
@@ -43,7 +49,7 @@ export const checkChatLimit = async (receiverId: string) => {
     const response = await api.get(`/chat/check-limit/${receiverId}`);
     return response.data;
   } catch (error: any) {
-    throw error.response?.data || error.message || 'Failed to check chat limit';
+    throw error.response?.data || error.message || i18n.t('chat.checkLimitFailed');
   }
 };
 

@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import {
   callRequestService,
   CallRequestItem,
@@ -20,6 +21,7 @@ interface CallRequestBannerProps {
 }
 
 export const CallRequestBanner = ({ requests, onUpdate }: CallRequestBannerProps) => {
+  const { t } = useTranslation();
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   if (!requests.length) return null;
@@ -31,7 +33,7 @@ export const CallRequestBanner = ({ requests, onUpdate }: CallRequestBannerProps
       onUpdate();
       Linking.openURL(`tel:${phone}`);
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not start call');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('callRequest.couldNotStartCall'));
     } finally {
       setLoadingId(null);
     }
@@ -43,7 +45,7 @@ export const CallRequestBanner = ({ requests, onUpdate }: CallRequestBannerProps
       await callRequestService.decline(requestId);
       onUpdate();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not decline request');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('callRequest.couldNotDecline'));
     } finally {
       setLoadingId(null);
     }
@@ -51,20 +53,20 @@ export const CallRequestBanner = ({ requests, onUpdate }: CallRequestBannerProps
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>Call requests</Text>
+      <Text style={styles.sectionTitle}>{t('callRequest.sectionTitle')}</Text>
       {requests.map((request) => (
         <View key={request._id} style={styles.card}>
           <View style={styles.iconWrap}>
             <Ionicons name="call" size={20} color="#FF9500" />
           </View>
           <View style={styles.info}>
-            <Text style={styles.title}>{request.requester.name} wants to call you</Text>
+            <Text style={styles.title}>{t('callRequest.wantsToCall', { name: request.requester.name })}</Text>
             {request.sourceTitle ? (
               <Text style={styles.subtitle} numberOfLines={1}>
-                via {request.sourceTitle}
+                {t('callRequest.via', { source: request.sourceTitle })}
               </Text>
             ) : null}
-            <Text style={styles.hint}>Phone number hidden until you tap Call</Text>
+            <Text style={styles.hint}>{t('callRequest.phoneHidden')}</Text>
           </View>
           <View style={styles.actions}>
             <TouchableOpacity
@@ -77,7 +79,7 @@ export const CallRequestBanner = ({ requests, onUpdate }: CallRequestBannerProps
               ) : (
                 <>
                   <Ionicons name="call" size={16} color="#fff" />
-                  <Text style={styles.callBtnText}>Call</Text>
+                  <Text style={styles.callBtnText}>{t('common.call')}</Text>
                 </>
               )}
             </TouchableOpacity>

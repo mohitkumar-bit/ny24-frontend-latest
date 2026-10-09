@@ -17,6 +17,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { CustomInput } from '@/components/CustomInput';
 import { CustomButton } from '@/components/CustomButton';
@@ -39,11 +41,8 @@ import {
   preventAndroidTextClip,
 } from '@/utils/androidTextFix';
 
-const TITLE_MAX = 11;
+const TITLE_MAX = 20;
 const DESCRIPTION_MAX = 29;
-const POST_SLOT_LIMIT_TITLE = 'Ad slots used';
-const POST_SLOT_LIMIT_MESSAGE =
-  'Your ads are used. Wait for the next 30 days for a new ad slot.';
 
 
 /** Letters/spaces/punctuation only — strip digits and enforce max length */
@@ -51,6 +50,8 @@ const sanitizeNoNumbers = (text: string, max: number) =>
   text.replace(/[0-9]/g, '').slice(0, max);
 
 export default function CreatePostScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { location: appLocation, loading: locationLoading, detectLocation } = useAppLocation();
@@ -70,10 +71,15 @@ export default function CreatePostScreen() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [description, setDescription] = useState('');
   const [genderRequirement, setGenderRequirement] = useState<'Any' | 'Male' | 'Female'>('Any');
+  const genderLabels = {
+    Any: t('createPost.genderAny'),
+    Male: t('createPost.genderMale'),
+    Female: t('createPost.genderFemale'),
+  };
   const [minAge, setMinAge] = useState('');
   const [maxAge, setMaxAge] = useState('');
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitMessage, setLimitMessage] = useState(POST_SLOT_LIMIT_MESSAGE);
+  const [limitMessage, setLimitMessage] = useState('');
   const [limitPlan, setLimitPlan] = useState<'free' | 'pro' | 'business' | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -121,7 +127,7 @@ export default function CreatePostScreen() {
       }
     } catch (error) {
       Alert.alert(
-        'Location failed',
+        t('createPost.locationFailed'),
         error instanceof Error ? error.message : getLocationErrorMessage(error)
       );
     } finally {
@@ -177,24 +183,24 @@ export default function CreatePostScreen() {
     cleanDescription: string
   ) => {
     const missing: string[] = [];
-    if (!cleanTitle) missing.push('Title');
-    if (selectedCategories.length === 0) missing.push('Category');
-    if (!location.trim()) missing.push('Location');
-    if (!cleanDescription) missing.push('Description');
+    if (!cleanTitle) missing.push(t('createPost.fields.title'));
+    if (selectedCategories.length === 0) missing.push(t('createPost.fields.category'));
+    if (!location.trim()) missing.push(t('createPost.fields.location'));
+    if (!cleanDescription) missing.push(t('createPost.fields.description'));
     if (missing.length > 0) {
-      return `Please fill: ${missing.join(', ')}`;
+      return t('createPost.errors.pleaseFill', { fields: missing.join(', ') });
     }
     if (cleanTitle.length > TITLE_MAX) {
-      return `Title must be at most ${TITLE_MAX} characters.`;
+      return t('createPost.errors.titleTooLong', { max: TITLE_MAX });
     }
     if (cleanDescription.length > DESCRIPTION_MAX) {
-      return `Description must be at most ${DESCRIPTION_MAX} characters.`;
+      return t('createPost.errors.descriptionTooLong', { max: DESCRIPTION_MAX });
     }
     if (/[0-9]/.test(title) || /[0-9]/.test(description)) {
-      return 'Title and description cannot contain numbers.';
+      return t('createPost.errors.noNumbers');
     }
     if ((minAge && Number(minAge) < AGE_MIN) || (maxAge && Number(maxAge) < AGE_MIN)) {
-      return `Age must be ${AGE_MIN} or older.`;
+      return t('createPost.errors.minAge', { min: AGE_MIN });
     }
     return '';
   };
@@ -226,7 +232,7 @@ export default function CreatePostScreen() {
           const serverMsg = uploadErr.response?.data?.message;
           setFormError(
             serverMsg ||
-              'Could not upload the photo. Remove it or try again.'
+              t('createPost.errors.photoUploadFailed')
           );
           return;
         } finally {
@@ -256,21 +262,21 @@ export default function CreatePostScreen() {
         (quota?.plan === 'business' || quota?.plan === 'pro') && !quota.canPostFree;
 
       if (needsExtraPostPay) {
-        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
+        setLimitMessage(t('createPost.slotLimitMessage'));
         setShowLimitModal(true);
         return;
       }
 
       await jobService.createJob(jobBody);
-      Alert.alert('Success', 'Post published successfully!');
+      Alert.alert(t('common.success'), t('createPost.publishSuccess'));
       router.replace('/(tabs)');
     } catch (err: any) {
       if (err.response?.status === 402) {
-        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
+        setLimitMessage(t('createPost.slotLimitMessage'));
         setShowLimitModal(true);
       } else if (err.response?.status === 403) {
         const data = err.response?.data || {};
-        setLimitMessage(POST_SLOT_LIMIT_MESSAGE);
+        setLimitMessage(t('createPost.slotLimitMessage'));
         setLimitPlan(
           data.plan === 'pro' || data.plan === 'business' || data.plan === 'free'
             ? data.plan
@@ -278,7 +284,7 @@ export default function CreatePostScreen() {
         );
         setShowLimitModal(true);
       } else {
-        setFormError(err.response?.data?.message || 'Failed to publish post');
+        setFormError(err.response?.data?.message || t('createPost.errors.publishFailed'));
       }
     } finally {
       setLoading(false);
@@ -294,7 +300,7 @@ export default function CreatePostScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Post</Text>
+        <Text style={styles.headerTitle}>{t('createPost.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -324,14 +330,14 @@ export default function CreatePostScreen() {
                 </TouchableOpacity>
                 <View style={styles.changePhotoOverlay}>
                   <Ionicons name="camera" size={18} color="#fff" />
-                  <Text style={styles.changePhotoText}>Change photo</Text>
+                  <Text style={styles.changePhotoText}>{t('createPost.changePhoto')}</Text>
                 </View>
               </>
             ) : (
               <View style={styles.uploadInner}>
                 <Ionicons name="image-outline" size={40} color="#FF9500" />
-                <Text style={styles.uploadTitle}>Add Photo (Optional)</Text>
-                <Text style={styles.uploadSub}>Camera or Gallery</Text>
+                <Text style={styles.uploadTitle}>{t('createPost.addPhotoOptional')}</Text>
+                <Text style={styles.uploadSub}>{t('createPost.cameraOrGallery')}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -346,7 +352,7 @@ export default function CreatePostScreen() {
             <View style={styles.photoOptionsOverlay}>
               <View style={styles.photoOptionsSheet}>
                 <View style={styles.photoOptionsHeader}>
-                  <Text style={styles.photoOptionsTitle}>Add Photo (Optional)</Text>
+                  <Text style={styles.photoOptionsTitle}>{t('createPost.addPhotoOptional')}</Text>
                   <TouchableOpacity
                     style={styles.photoOptionsCloseBtn}
                     onPress={() => setShowPhotoOptions(false)}
@@ -365,7 +371,7 @@ export default function CreatePostScreen() {
                     }}
                   >
                     <Ionicons name="camera-outline" size={18} color="#FF9500" />
-                    <Text style={styles.photoOptionText}>Take Photo</Text>
+                    <Text style={styles.photoOptionText}>{t('createPost.takePhoto')}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -376,7 +382,7 @@ export default function CreatePostScreen() {
                     }}
                   >
                     <Ionicons name="images-outline" size={18} color="#FF9500" />
-                    <Text style={styles.photoOptionText}>Choose from Gallery</Text>
+                    <Text style={styles.photoOptionText}>{t('createPost.chooseFromGallery')}</Text>
                   </TouchableOpacity>
 
                   {photoUri && (
@@ -389,7 +395,7 @@ export default function CreatePostScreen() {
                     >
                       <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                       <Text style={[styles.photoOptionText, { color: '#FF3B30' }]}>
-                        Remove Photo
+                        {t('createPost.removePhoto')}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -399,7 +405,7 @@ export default function CreatePostScreen() {
                   style={styles.photoOptionsCancelBtn}
                   onPress={() => setShowPhotoOptions(false)}
                 >
-                  <Text style={styles.photoOptionsCancelText}>Cancel</Text>
+                  <Text style={styles.photoOptionsCancelText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -408,19 +414,19 @@ export default function CreatePostScreen() {
           {/* Form Fields */}
           <View style={styles.form}>
             <CustomInput
-              label="Title *"
-              placeholder="E.g. Need plumber"
+              label={t('createPost.titleLabel')}
+              placeholder={t('createPost.titlePlaceholder')}
               value={title}
               onChangeText={(text) => setTitle(sanitizeNoNumbers(text, TITLE_MAX))}
               icon="text-outline"
               maxLength={TITLE_MAX}
             />
             <Text style={styles.charHint}>
-              {title.length}/{TITLE_MAX} · letters only, no numbers
+              {t('createPost.charHint', { used: title.length, max: TITLE_MAX })}
             </Text>
             {/* Requirements */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, preventAndroidLabelClip()]}>Gender Requirement</Text>
+              <Text style={[styles.label, preventAndroidLabelClip()]}>{t('createPost.genderRequirement')}</Text>
               <View style={styles.chipRow}>
                 {(['Any', 'Male', 'Female'] as const).map((g) => (
                   <TouchableOpacity
@@ -428,18 +434,18 @@ export default function CreatePostScreen() {
                     style={[styles.reqChip, genderRequirement === g && styles.reqChipActive]}
                     onPress={() => setGenderRequirement(g)}
                   >
-                    <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{g}</Text>
+                    <Text style={[styles.reqChipText, preventAndroidChipTextClip(), genderRequirement === g && styles.reqChipTextActive]}>{genderLabels[g]}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Age Requirement</Text>
+              <Text style={styles.label}>{t('createPost.ageRequirement')}</Text>
               <View style={styles.row}>
                 <View style={styles.flex1}>
                   <TextInput
-                    placeholder="Min (Any)"
+                    placeholder={t('createPost.minAgePlaceholder')}
                     placeholderTextColor="#999"
                     style={styles.smallInput}
                     value={minAge}
@@ -451,7 +457,7 @@ export default function CreatePostScreen() {
                 </View>
                 <View style={styles.flex1}>
                   <TextInput
-                    placeholder="Max (Any)"
+                    placeholder={t('createPost.maxAgePlaceholder')}
                     placeholderTextColor="#999"
                     style={styles.smallInput}
                     value={maxAge}
@@ -465,7 +471,7 @@ export default function CreatePostScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Categories *</Text>
+              <Text style={styles.label}>{t('createPost.categoriesLabel')}</Text>
               <TouchableOpacity
                 style={styles.pickerTrigger}
                 onPress={() => setShowCategoryModal(true)}
@@ -475,7 +481,7 @@ export default function CreatePostScreen() {
                   {selectedCategories.length > 0 ? (
                     selectedCategories.map(cat => (
                       <View key={cat._id} style={styles.miniBadge}>
-                        <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{cat.name}</Text>
+                        <Text style={[styles.miniBadgeText, preventAndroidListItemTextClip()]}>{phonetic(cat.name)}</Text>
                         <TouchableOpacity
                           onPress={() => setSelectedCategories(selectedCategories.filter(c => c._id !== cat._id))}
                           style={styles.removeIcon}
@@ -485,7 +491,7 @@ export default function CreatePostScreen() {
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.pickerText}>Select Categories</Text>
+                    <Text style={styles.pickerText}>{t('createPost.selectCategories')}</Text>
                   )}
                 </View>
                 <Ionicons name="chevron-down" size={20} color="#999" />
@@ -493,8 +499,8 @@ export default function CreatePostScreen() {
             </View>
 
             <CustomInput
-              label="Price (₹) — leave blank for Free"
-              placeholder="Enter amount"
+              label={t('createPost.priceLabel')}
+              placeholder={t('createPost.pricePlaceholder')}
               value={price}
               onChangeText={setPrice}
               icon="cash-outline"
@@ -503,24 +509,24 @@ export default function CreatePostScreen() {
 
             <View style={styles.inputGroup}>
               <View style={styles.locationLabelRow}>
-                <Text style={styles.label}>Location *</Text>
+                <Text style={styles.label}>{t('createPost.locationLabel')}</Text>
                 <TouchableOpacity
                   style={styles.useLocationBtn}
                   onPress={handleUseCurrentLocation}
                   disabled={detectingLocation || locationLoading}
                 >
                   {detectingLocation || locationLoading ? (
-                    <Text style={styles.useLocationText}>Detecting...</Text>
+                    <Text style={styles.useLocationText}>{t('createPost.detecting')}</Text>
                   ) : (
                     <>
                       <Ionicons name="navigate" size={14} color="#00A300" />
-                      <Text style={styles.useLocationText}>Use current location</Text>
+                      <Text style={styles.useLocationText}>{t('createPost.useCurrentLocation')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
               </View>
               <CustomInput
-                placeholder="e.g. Bistupur, Jamshedpur"
+                placeholder={t('createPost.locationPlaceholder')}
                 value={location}
                 onChangeText={(text) => {
                   setLocationEdited(true);
@@ -531,12 +537,12 @@ export default function CreatePostScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Description *</Text>
+              <Text style={styles.label}>{t('createPost.descriptionLabel')}</Text>
               <View style={styles.textAreaContainer}>
                 <Ionicons name="document-text-outline" size={22} color="#666" style={styles.textAreaIcon} />
                 <TextInput
                   style={styles.textArea}
-                  placeholder="Short description (no numbers)..."
+                  placeholder={t('createPost.descriptionPlaceholder')}
                   placeholderTextColor="#999"
                   value={description}
                   onChangeText={(text) =>
@@ -548,7 +554,7 @@ export default function CreatePostScreen() {
                 />
               </View>
               <Text style={styles.charHint}>
-                {description.length}/{DESCRIPTION_MAX} · letters only, no numbers
+                {t('createPost.charHint', { used: description.length, max: DESCRIPTION_MAX })}
               </Text>
             </View>
           </View>
@@ -565,7 +571,7 @@ export default function CreatePostScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
+              <Text style={styles.modalTitle}>{t('createPost.selectCategory')}</Text>
               <TouchableOpacity onPress={closeCategoryModal}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
@@ -575,7 +581,7 @@ export default function CreatePostScreen() {
               <Ionicons name="search" size={18} color="#999" style={styles.categorySearchIcon} />
               <TextInput
                 style={styles.categorySearchInput}
-                placeholder="Search categories..."
+                placeholder={t('createPost.searchCategories')}
                 placeholderTextColor="#999"
                 value={categorySearch}
                 onChangeText={setCategorySearch}
@@ -596,7 +602,7 @@ export default function CreatePostScreen() {
               contentContainerStyle={styles.modalList}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
-                <Text style={styles.categoryEmptyText}>No categories found</Text>
+                <Text style={styles.categoryEmptyText}>{t('createPost.noCategoriesFound')}</Text>
               }
               renderItem={({ item }) => {
                 const isSelected = selectedCategories.some(c => c._id === item._id);
@@ -614,7 +620,7 @@ export default function CreatePostScreen() {
                     <View style={styles.categoryIconContainer}>
                       <Ionicons name={item.icon as any} size={20} color="#FF9500" />
                     </View>
-                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{item.name}</Text>
+                    <Text style={[styles.categoryItemText, preventAndroidListItemTextClip()]}>{phonetic(item.name)}</Text>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={24} color="#00A300" />
                     )}
@@ -640,16 +646,16 @@ export default function CreatePostScreen() {
                 <Ionicons name="lock-closed" size={50} color="#FF9500" />
               </View>
               
-              <Text style={styles.limitTitle}>{POST_SLOT_LIMIT_TITLE}</Text>
+              <Text style={styles.limitTitle}>{t('createPost.slotLimitTitle')}</Text>
               <Text style={styles.limitDescription}>
-                {limitMessage || POST_SLOT_LIMIT_MESSAGE}
+                {limitMessage || t('createPost.slotLimitMessage')}
               </Text>
 
               <TouchableOpacity 
                 style={styles.maybeLaterBtn}
                 onPress={() => setShowLimitModal(false)}
               >
-                <Text style={styles.maybeLaterText}>OK</Text>
+                <Text style={styles.maybeLaterText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -672,10 +678,10 @@ export default function CreatePostScreen() {
         >
           <Text style={styles.publishBtnText}>
             {uploadingPhoto
-              ? 'Uploading photo...'
+              ? t('createPost.uploadingPhoto')
               : loading
-                ? 'Publishing...'
-                : 'Publish Post'}
+                ? t('createPost.publishing')
+                : t('createPost.publishPost')}
           </Text>
         </TouchableOpacity>
       </View>

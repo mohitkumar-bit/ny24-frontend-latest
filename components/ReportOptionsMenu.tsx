@@ -11,6 +11,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type ReportOptionsMenuProps = {
   onReport: () => void;
@@ -32,9 +33,10 @@ export function ReportOptionsMenu({
   buttonStyle,
   iconColor = '#64748B',
   iconSize = 22,
-  reportLabel = 'Report',
+  reportLabel,
   align = 'right',
 }: ReportOptionsMenuProps) {
+  const { t } = useTranslation();
   const anchorRef = useRef<View>(null);
   const [visible, setVisible] = useState(false);
   const [menuLayout, setMenuLayout] = useState({ top: 0, left: 0, width: 160 });
@@ -98,7 +100,7 @@ export function ReportOptionsMenu({
             >
               <TouchableOpacity style={styles.dropdownItem} onPress={handleReport}>
                 <Ionicons name="flag-outline" size={18} color="#FF9500" />
-                <Text style={styles.dropdownItemText}>{reportLabel}</Text>
+                <Text style={styles.dropdownItemText}>{reportLabel ?? t('common.report')}</Text>
               </TouchableOpacity>
               {onBlock ? (
                 <>
@@ -115,7 +117,7 @@ export function ReportOptionsMenu({
                         blockedByMe ? styles.unblockText : styles.blockText,
                       ]}
                     >
-                      {blockedByMe ? 'Unblock' : 'Block'}
+                      {blockedByMe ? t('common.unblock') : t('common.block')}
                     </Text>
                   </TouchableOpacity>
                 </>

@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 
 export interface Worker {
   _id: string;
@@ -21,10 +23,13 @@ interface WorkerCardProps {
 }
 
 export const WorkerCard = ({ worker }: WorkerCardProps) => {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
-  const userName = worker.user?.name?.trim() || 'Worker';
+  const userName = phonetic(worker.user?.name?.trim()) || t('workers.defaultName');
   const skills = Array.isArray(worker.skills) ? worker.skills : [];
-  const locationLabel = worker.location?.address || worker.location?.city || 'Location unavailable';
+  const locationLabel =
+    phonetic(worker.location?.address || worker.location?.city) || t('workers.locationUnavailable');
 
   if (!worker?._id || !worker.user?._id) {
     return null;
@@ -58,13 +63,12 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
             {worker.user?.isVerified ? (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={12} color="#fff" />
-                <Text style={styles.verifiedText}>Verified</Text>
+                <Text style={styles.verifiedText}>{t('workers.verified')}</Text>
               </View>
             ) : null}
           </View>
-          
           <Text style={styles.title} numberOfLines={1}>
-            {skills.map((s) => s.name).join(', ') || worker.title || 'Professional'}
+            {phonetic(skills.map((s) => s.name).join(', ')) || phonetic(worker.title) || t('workers.defaultTitle')}
           </Text>
         </View>
 
@@ -72,7 +76,7 @@ export const WorkerCard = ({ worker }: WorkerCardProps) => {
           <View style={styles.priceRow}>
             <Text style={styles.currency}>₹</Text>
             <Text style={styles.price}>{worker.hourlyRate}</Text>
-            <Text style={styles.rateSuffix}>/hr</Text>
+            <Text style={styles.rateSuffix}>{t('workers.perHour')}</Text>
           </View>
           
           <View style={styles.locationRow}>

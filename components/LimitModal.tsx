@@ -1,10 +1,7 @@
 import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
-  PROFESSIONAL_TOOLS_INACTIVE_TITLE,
-} from '@/utils/professionalTools';
+import { useTranslation } from 'react-i18next';
 
 interface LimitModalProps {
   visible: boolean;
@@ -20,10 +17,12 @@ interface LimitModalProps {
 export const LimitModal: React.FC<LimitModalProps> = ({
   visible,
   onClose,
-  title = PROFESSIONAL_TOOLS_INACTIVE_TITLE,
-  message = PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
+  title,
+  message,
   icon = 'construct-outline',
 }) => {
+  const { t } = useTranslation();
+
   if (!visible) {
     return null;
   }
@@ -44,13 +43,13 @@ export const LimitModal: React.FC<LimitModalProps> = ({
               </View>
             </View>
 
-            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.title}>{title ?? t('professionalTools.inactiveTitle')}</Text>
 
-            <Text style={styles.message}>{message}</Text>
+            <Text style={styles.message}>{message ?? t('professionalTools.inactiveMessage')}</Text>
 
             <TouchableOpacity style={styles.okBtn} onPress={onClose} activeOpacity={0.85}>
               <LinearGradient colors={['#FF9500', '#FFB347']} style={styles.gradientBtn}>
-                <Text style={styles.okText}>OK</Text>
+                <Text style={styles.okText}>{t('common.ok')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </LinearGradient>

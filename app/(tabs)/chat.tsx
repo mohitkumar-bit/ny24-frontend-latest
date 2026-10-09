@@ -25,6 +25,9 @@ import { authService } from '../../services/auth.service';
 import { formatMessageTime } from '@/utils/formatTime';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LimitModal } from '@/components/LimitModal';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
+import i18n from '@/i18n';
 
 interface Chat {
   _id: string;
@@ -36,7 +39,7 @@ interface Chat {
   lastMessage?: {
     text: string;
     createdAt: string;
-    messageType?: 'text' | 'call_request' | 'image' | 'audio';
+    messageType?: 'text' | 'call_request' | 'image' | 'audio' | 'location';
   };
   lastMessageAt?: string;
   unreadCount?: number;
@@ -55,11 +58,12 @@ const FREE_VISIBLE_CHATS = 3;
 
 const getLastMessagePreview = (chat: Chat) => {
   const msg = chat.lastMessage;
-  if (!msg) return 'No messages yet';
-  if (msg.messageType === 'image') return msg.text?.trim() || 'Photo';
-  if (msg.messageType === 'audio') return msg.text?.trim() || 'Voice message';
-  if (msg.messageType === 'call_request') return 'Call request';
-  return msg.text || 'No messages yet';
+  if (!msg) return i18n.t('chatList.noMessagesYet');
+  if (msg.messageType === 'image') return msg.text?.trim() || i18n.t('chatList.photo');
+  if (msg.messageType === 'audio') return msg.text?.trim() || i18n.t('chatList.voiceMessage');
+  if (msg.messageType === 'call_request') return i18n.t('chatList.callRequest');
+  if (msg.messageType === 'location') return `📍 ${i18n.t('chatList.location')}`;
+  return msg.text || i18n.t('chatList.noMessagesYet');
 };
 
 const ChatItem = ({
@@ -73,10 +77,13 @@ const ChatItem = ({
   isSubscribed: boolean;
   onRefresh: () => void;
 }) => {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
   const [menuVisible, setMenuVisible] = useState(false);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const avatarLetter = chat.otherUser.name.charAt(0).toUpperCase();
+  const displayName = phonetic(chat.otherUser.name);
   const avatarUrl = chat.otherUser.profilePicture || null;
   // First 3 in list are visible; 4th+ show locked. Slots still used only when you open/send.
   const isLocked = !isSubscribed && index >= FREE_VISIBLE_CHATS;
@@ -94,9 +101,9 @@ const ChatItem = ({
     } catch (error: any) {
       const data = error.response?.data || error;
       if (data?.code === 'CHAT_LIMIT_REACHED') {
-        Alert.alert('All Slots Full', data.message || 'Cannot pin — all chat slots are in use.');
+        Alert.alert(t('chatList.allSlotsFullTitle'), data.message || t('chatList.cannotPinMessage'));
       } else {
-        Alert.alert('Error', data?.message || 'Could not update pin');
+        Alert.alert(t('common.error'), data?.message || t('chatList.couldNotUpdatePin'));
       }
     }
   };
@@ -122,7 +129,7 @@ const ChatItem = ({
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
             ) : (
-              <Text style={styles.avatarText}>{avatarLetter}</Text>
+              <Text style={styles.avatarText}>{displayName === chat.otherUser.name ? avatarLetter : displayName.charAt(0)}</Text>
             )}
           </View>
           {!isLocked && chat.isPinned && (
@@ -138,7 +145,7 @@ const ChatItem = ({
               {!isLocked && (
                 <View style={styles.nameRow}>
                   <Text style={styles.userName} numberOfLines={1}>
-                    {chat.otherUser.name}
+                    {displayName}
                   </Text>
                   {chat.isPinned && (
                     <MaterialCommunityIcons name="pin" size={16} color="#EF4444" style={{ marginLeft: 4 }} />
@@ -151,13 +158,13 @@ const ChatItem = ({
                   <BlurView intensity={85} tint="light" style={styles.messageBlurLayer}>
                     <View style={styles.blurOverlay}>
                       <Ionicons name="lock-closed" size={15} color="#FF9500" />
-                      <Text style={styles.blurText}>Locked</Text>
+                      <Text style={styles.blurText}>{t('chatList.locked')}</Text>
                     </View>
                   </BlurView>
                 </View>
               ) : (
                 <Text style={styles.lastMessage} numberOfLines={1}>
-                  {getLastMessagePreview(chat)}
+                  {phonetic(getLastMessagePreview(chat))}
                 </Text>
               )}
             </View>
@@ -187,8 +194,8 @@ const ChatItem = ({
       <LimitModal
         visible={upgradeModalVisible}
         onClose={() => setUpgradeModalVisible(false)}
-        title="Chat slots are full"
-        message="Chat slots are full. Try after 24 hours."
+        title={t('chat.slotsFullTitle')}
+        message={t('chat.slotsFullMessage')}
         plan="Free"
       />
 
@@ -204,7 +211,7 @@ const ChatItem = ({
           onPress={() => setMenuVisible(false)}
         >
           <View style={styles.menuContent}>
-            <Text style={styles.menuTitle}>{chat.otherUser.name}</Text>
+            <Text style={styles.menuTitle}>{displayName}</Text>
             <TouchableOpacity 
               style={styles.menuOption} 
               onPress={handlePinToggle}
@@ -215,7 +222,7 @@ const ChatItem = ({
                 color="#EF4444" 
               />
               <Text style={styles.menuOptionText}>
-                {chat.isPinned ? "Unpin Chat" : "Pin Chat"}
+                {chat.isPinned ? t('chatList.unpinChat') : t('chatList.pinChat')}
               </Text>
             </TouchableOpacity>
             
@@ -223,7 +230,7 @@ const ChatItem = ({
               style={[styles.menuOption, styles.cancelOption]} 
               onPress={() => setMenuVisible(false)}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -234,6 +241,7 @@ const ChatItem = ({
 };
 
 export default function ChatScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [conversations, setConversations] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,7 +262,7 @@ export default function ChatScreen() {
       const preview = getLastMessagePreview(chat).toLowerCase();
       return name.includes(query) || preview.includes(query);
     });
-  }, [conversations, searchQuery]);
+  }, [conversations, searchQuery, t]);
 
   const openSearch = () => {
     setShowSearch(true);
@@ -324,10 +332,10 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <View>
-          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerTitle}>{t('chatList.title')}</Text>
           {!isSubscribed && (
             <Text style={styles.slotsText}>
-              {slotsUsed}/{slotLimit} chat slots used
+              {t('chatList.slotsUsed', { used: slotsUsed, limit: slotLimit })}
             </Text>
           )}
         </View>
@@ -342,7 +350,7 @@ export default function ChatScreen() {
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
-            placeholder="Search chats..."
+            placeholder={t('chatList.searchPlaceholder')}
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -356,7 +364,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={closeSearch} style={styles.searchCancelBtn}>
-            <Text style={styles.searchCancelText}>Cancel</Text>
+            <Text style={styles.searchCancelText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -388,16 +396,16 @@ export default function ChatScreen() {
               {searchQuery.trim() ? (
                 <>
                   <Ionicons name="search-outline" size={64} color="#E2E8F0" />
-                  <Text style={{ fontSize: 18, color: '#64748B', marginTop: 16 }}>No chats found</Text>
+                  <Text style={{ fontSize: 18, color: '#64748B', marginTop: 16 }}>{t('chatList.noChatsFound')}</Text>
                   <Text style={{ color: '#94A3B8', marginTop: 8, textAlign: 'center', paddingHorizontal: 24 }}>
-                    Try a different name or message keyword
+                    {t('chatList.tryDifferentKeyword')}
                   </Text>
                 </>
               ) : (
                 <>
                   <Ionicons name="chatbubbles-outline" size={80} color="#E2E8F0" />
-                  <Text style={{ fontSize: 18, color: '#64748B', marginTop: 16 }}>No messages yet</Text>
-                  <Text style={{ color: '#94A3B8', marginTop: 8 }}>Find a worker to start chatting</Text>
+                  <Text style={{ fontSize: 18, color: '#64748B', marginTop: 16 }}>{t('chatList.noMessagesYet')}</Text>
+                  <Text style={{ color: '#94A3B8', marginTop: 8 }}>{t('chatList.findWorkerToChat')}</Text>
                 </>
               )}
             </View>

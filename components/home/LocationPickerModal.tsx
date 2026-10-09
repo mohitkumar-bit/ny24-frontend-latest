@@ -14,7 +14,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
 import { useAppLocation } from '@/contexts/AppLocationContext';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { locationStorage } from '@/services/locationStorage';
 import {
   searchLocationSuggestions,
@@ -42,6 +45,9 @@ export function LocationPickerModal({
   reserveTabBarSpace = false,
 }: LocationPickerModalProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
+  const phonetic = usePhonetic();
   const tabBarClearance = reserveTabBarSpace ? 60 + Math.max(insets.bottom, 10) : 0;
   const { location, detecting, setLocation, detectLocation } = useAppLocation();
   const [cityInput, setCityInput] = useState('');
@@ -104,7 +110,7 @@ export function LocationPickerModal({
       setSuggestions([]);
       await finishLocation();
     } catch {
-      Alert.alert('Error', 'Could not save this location. Please try again.');
+      Alert.alert(t('common.error'), t('locationPicker.saveThisFailed'));
     } finally {
       setSaving(false);
     }
@@ -116,8 +122,8 @@ export function LocationPickerModal({
       await finishLocation();
     } catch (error) {
       Alert.alert(
-        'Location failed',
-        error instanceof Error ? error.message : 'Could not detect location'
+        t('locationPicker.locationFailed'),
+        error instanceof Error ? error.message : t('locationPicker.detectFailed')
       );
     }
   };
@@ -125,7 +131,7 @@ export function LocationPickerModal({
   const handleSaveCity = async () => {
     const city = cityInput.trim();
     if (!city) {
-      Alert.alert('Enter location', 'Please enter your city or area name.');
+      Alert.alert(t('locationPicker.enterLocation'), t('locationPicker.enterCityPrompt'));
       return;
     }
 
@@ -148,7 +154,7 @@ export function LocationPickerModal({
       });
       await finishLocation();
     } catch {
-      Alert.alert('Error', 'Could not save your location. Please try again.');
+      Alert.alert(t('common.error'), t('locationPicker.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -159,10 +165,10 @@ export function LocationPickerModal({
     onClose();
   };
 
-  const title = isFirstTime ? 'Set your location first' : 'Choose your location';
+  const title = isFirstTime ? t('locationPicker.firstTimeTitle') : t('locationPicker.title');
   const subtitle = isFirstTime
-    ? 'Please enter your location to see nearby jobs and workers in your area.'
-    : 'Jobs and workers near you will be shown based on this location';
+    ? t('locationPicker.firstTimeSubtitle')
+    : t('locationPicker.subtitle');
 
   if (!visible) {
     return null;
@@ -200,7 +206,7 @@ export function LocationPickerModal({
             <View style={styles.firstTimeBanner}>
               <Ionicons name="information-circle" size={18} color="#C2410C" />
               <Text style={styles.firstTimeText}>
-                Location is required before you can browse jobs and workers.
+                {t('locationPicker.firstTimeBanner')}
               </Text>
             </View>
           ) : null}
@@ -212,7 +218,7 @@ export function LocationPickerModal({
               <View style={styles.currentBox}>
                 <Ionicons name="location" size={18} color="#00A300" />
                 <Text style={styles.currentText} numberOfLines={2}>
-                  {location.display}
+                  {phonetic(location.display)}
                 </Text>
               </View>
             ) : null}
@@ -227,23 +233,23 @@ export function LocationPickerModal({
               ) : (
                 <>
                   <Ionicons name="navigate" size={18} color="#fff" />
-                  <Text style={styles.detectText}>Use current location</Text>
+                  <Text style={styles.detectText}>{t('locationPicker.useCurrentLocation')}</Text>
                 </>
               )}
             </TouchableOpacity>
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
+              <Text style={styles.dividerText}>{t('locationPicker.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            <Text style={styles.inputLabel}>Enter city / area</Text>
+            <Text style={styles.inputLabel}>{t('locationPicker.enterCityArea')}</Text>
             <View style={styles.inputWrap}>
               <Ionicons name="search-outline" size={18} color="#94A3B8" />
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Jamshedpur, Delhi"
+                placeholder={t('locationPicker.cityPlaceholder')}
                 placeholderTextColor="#94A3B8"
                 value={cityInput}
                 onChangeText={setCityInput}
@@ -265,7 +271,7 @@ export function LocationPickerModal({
                   >
                     <Ionicons name="location-outline" size={16} color="#64748B" />
                     <Text style={styles.suggestionText} numberOfLines={2}>
-                      {item.display}
+                      {phonetic(item.display)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -273,7 +279,7 @@ export function LocationPickerModal({
             ) : null}
 
             {!searching && cityInput.trim().length >= 2 && suggestions.length === 0 ? (
-              <Text style={styles.noResultsText}>No matches found — try a nearby city name.</Text>
+              <Text style={styles.noResultsText}>{t('locationPicker.noMatches')}</Text>
             ) : null}
 
             <TouchableOpacity
@@ -284,7 +290,7 @@ export function LocationPickerModal({
               {saving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.saveText}>Search in this area</Text>
+                <Text style={styles.saveText}>{t('locationPicker.searchInArea')}</Text>
               )}
             </TouchableOpacity>
           </ScrollView>
@@ -294,7 +300,7 @@ export function LocationPickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',

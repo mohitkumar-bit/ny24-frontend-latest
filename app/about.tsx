@@ -4,8 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Logo } from '@/components/Logo';
+import { useTranslation } from 'react-i18next';
 
 export default function AboutScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -23,7 +25,7 @@ export default function AboutScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>About Us</Text>
+          <Text style={styles.headerTitle}>{t('about.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -31,45 +33,43 @@ export default function AboutScreen() {
           <View style={styles.logoSection}>
             <Logo size={88} />
             <Text style={styles.appName}>gigSEVA</Text>
-            <Text style={styles.version}>Version 1.0.0</Text>
+            <Text style={styles.version}>{t('about.version', { version: '1.0.0' })}</Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Our Mission</Text>
+            <Text style={styles.sectionTitle}>{t('about.missionTitle')}</Text>
             <Text style={styles.text}>
-              gigSEVA is dedicated to connecting skilled workers with those who need their expertise.
-              Our mission is to create a seamless, reliable, and efficient marketplace for services,
-              empowering individuals to grow their businesses and find quality assistance whenever needed.
+              {t('about.missionBody')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>How It Works</Text>
+            <Text style={styles.sectionTitle}>{t('about.howItWorksTitle')}</Text>
             <View style={styles.step}>
               <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Post a Job</Text>
-                <Text style={styles.stepText}>Describe the service you need and your location.</Text>
+                <Text style={styles.stepTitle}>{t('about.step1Title')}</Text>
+                <Text style={styles.stepText}>{t('about.step1Body')}</Text>
               </View>
             </View>
             <View style={styles.step}>
               <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Connect with Pros</Text>
-                <Text style={styles.stepText}>Experienced workers will reach out to help you.</Text>
+                <Text style={styles.stepTitle}>{t('about.step2Title')}</Text>
+                <Text style={styles.stepText}>{t('about.step2Body')}</Text>
               </View>
             </View>
             <View style={styles.step}>
               <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Get it Done</Text>
-                <Text style={styles.stepText}>Quality service delivered right to your doorstep.</Text>
+                <Text style={styles.stepTitle}>{t('about.step3Title')}</Text>
+                <Text style={styles.stepText}>{t('about.step3Body')}</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>© 2026 gigSEVA Inc. All rights reserved.</Text>
+            <Text style={styles.footerText}>{t('about.copyright')}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

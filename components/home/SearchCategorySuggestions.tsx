@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { categoryService, Category } from '@/services/category.service';
 
 type Props = {
@@ -24,6 +26,8 @@ export function SearchCategorySuggestions({
   onSelect,
   onDropdownPressIn,
 }: Props) {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const [categories, setCategories] = useState<Category[]>([]);
   const isDraggingRef = useRef(false);
   const typedQuery = query.trim();
@@ -61,7 +65,7 @@ export function SearchCategorySuggestions({
         pointerEvents="auto"
         onTouchStart={onDropdownPressIn}
       >
-        <Text style={styles.label}>Recommended categories</Text>
+        <Text style={styles.label}>{t('home.recommendedCategories')}</Text>
         <FlatList
           data={suggestions}
           keyExtractor={(item) => item._id}
@@ -108,7 +112,7 @@ export function SearchCategorySuggestions({
                 />
               </View>
               <Text style={styles.name} numberOfLines={1}>
-                {item.name}
+                {phonetic(item.name)}
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
             </TouchableOpacity>

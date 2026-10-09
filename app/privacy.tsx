@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Sta
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 export default function PrivacyScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -22,50 +24,50 @@ export default function PrivacyScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Privacy Policy</Text>
+          <Text style={styles.headerTitle}>{t('privacy.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.lastUpdated}>Last Updated: June 2026</Text>
+          <Text style={styles.lastUpdated}>{t('privacy.lastUpdated')}</Text>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>1. Information We Collect</Text>
+            <Text style={styles.sectionTitle}>{t('privacy.sections.infoCollect.title')}</Text>
             <Text style={styles.text}>
-              We collect information you provide directly to us, such as your name, email address, phone number, and location data when you use our services.
+              {t('privacy.sections.infoCollect.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>2. How We Use Information</Text>
+            <Text style={styles.sectionTitle}>{t('privacy.sections.infoUse.title')}</Text>
             <Text style={styles.text}>
-              We use the information to connect job seekers with service providers, improve our app experience, and communicate with you about your account and our services.
+              {t('privacy.sections.infoUse.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>3. Sharing of Information</Text>
+            <Text style={styles.sectionTitle}>{t('privacy.sections.infoSharing.title')}</Text>
             <Text style={styles.text}>
-              We share your contact information and location with other users only when necessary to facilitate a service connection (e.g., sharing a worker's location with a client).
+              {t('privacy.sections.infoSharing.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>4. Location Services</Text>
+            <Text style={styles.sectionTitle}>{t('privacy.sections.location.title')}</Text>
             <Text style={styles.text}>
-              Our app requires access to your location to find nearby services. You can manage location permissions in your device settings.
+              {t('privacy.sections.location.body')}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>5. Data Security</Text>
+            <Text style={styles.sectionTitle}>{t('privacy.sections.dataSecurity.title')}</Text>
             <Text style={styles.text}>
-              We implement industry-standard security measures to protect your personal information from unauthorized access or disclosure.
+              {t('privacy.sections.dataSecurity.body')}
             </Text>
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Privacy is our priority at gigSEVA.</Text>
+            <Text style={styles.footerText}>{t('privacy.footer')}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

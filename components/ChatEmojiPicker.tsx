@@ -8,6 +8,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { filterEmojis } from '@/constants/chatEmojiData';
 import { recentEmojisStorage } from '@/services/recentEmojisStorage';
 
@@ -24,10 +25,12 @@ function EmojiGrid({
   onSelect: (emoji: string) => void;
   emptyText?: string;
 }) {
+  const { t } = useTranslation();
+
   if (!emojis.length) {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>{emptyText || 'No emojis found'}</Text>
+        <Text style={styles.emptyText}>{emptyText || t('emojiPicker.noEmojisFound')}</Text>
       </View>
     );
   }
@@ -49,6 +52,7 @@ function EmojiGrid({
 }
 
 export function ChatEmojiPicker({ onSelect }: Props) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
 
@@ -89,7 +93,7 @@ export function ChatEmojiPicker({ onSelect }: Props) {
         <Ionicons name="search-outline" size={16} color="#94A3B8" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search emoji..."
+          placeholder={t('emojiPicker.searchPlaceholder')}
           placeholderTextColor="#94A3B8"
           value={query}
           onChangeText={setQuery}
@@ -111,7 +115,7 @@ export function ChatEmojiPicker({ onSelect }: Props) {
       >
         {recentForDisplay.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recently used</Text>
+            <Text style={styles.sectionTitle}>{t('emojiPicker.recentlyUsed')}</Text>
             <View style={styles.recentRow}>
               {recentForDisplay.map((emoji, index) => (
                 <TouchableOpacity
@@ -129,17 +133,17 @@ export function ChatEmojiPicker({ onSelect }: Props) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {isSearching ? 'Search results' : 'All emojis'}
+            {isSearching ? t('emojiPicker.searchResults') : t('emojiPicker.allEmojis')}
           </Text>
           <EmojiGrid
             emojis={allForDisplay}
             onSelect={handleSelect}
             emptyText={
               isSearching
-                ? 'No emojis match your search'
+                ? t('emojiPicker.noSearchMatch')
                 : recentForDisplay.length
-                  ? 'No more emojis'
-                  : 'No emojis found'
+                  ? t('emojiPicker.noMoreEmojis')
+                  : t('emojiPicker.noEmojisFound')
             }
           />
         </View>

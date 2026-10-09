@@ -6,16 +6,18 @@ import { saveService } from '@/services/save.service';
 import { JobPost } from '@/services/job.service';
 import { Skeleton } from '@/components/Skeleton';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 
 const mapBackendToPost = (job: JobPost): Post => ({
   id: job._id,
   title: job.title,
   category: job.categories && job.categories.length > 0
     ? job.categories.map((c: any) => c.name).join(', ')
-    : 'General',
+    : i18n.t('saved.general'),
   price: `₹${job.price}`,
-  location: job.location?.address || 'Unknown',
-  author: typeof job.author === 'object' ? job.author.name : 'Anonymous',
+  location: job.location?.address || i18n.t('saved.unknownLocation'),
+  author: typeof job.author === 'object' ? job.author.name : i18n.t('saved.anonymous'),
   time: new Date(job.createdAt).toLocaleDateString(),
   gradient: ['#FF9500', '#FFD200'],
   icon: job.categories && job.categories.length > 0
@@ -27,6 +29,7 @@ const mapBackendToPost = (job: JobPost): Post => ({
 
 
 export default function SavedScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -65,8 +68,8 @@ export default function SavedScreen() {
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Saved Jobs</Text>
-            <Text style={styles.headerSubtitle}>{posts.length} jobs saved</Text>
+            <Text style={styles.headerTitle}>{t('saved.title')}</Text>
+            <Text style={styles.headerSubtitle}>{t('saved.jobsSavedCount', { number: posts.length })}</Text>
           </View>
         </View>
 
@@ -89,7 +92,7 @@ export default function SavedScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No saved jobs yet.</Text>
+              <Text style={styles.emptyText}>{t('saved.empty')}</Text>
             </View>
           }
         />

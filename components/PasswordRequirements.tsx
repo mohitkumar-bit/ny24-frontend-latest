@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
+import type { TFunction } from 'i18next';
 
 export type PasswordChecks = {
   hasMinLength: boolean;
@@ -29,15 +32,16 @@ export function getPasswordChecks(password: string): PasswordChecks {
   };
 }
 
-const REQUIREMENTS: { key: keyof Omit<PasswordChecks, 'isValid'>; label: string }[] = [
-  { key: 'hasMinLength', label: 'At least 6 characters' },
-  { key: 'hasLowercase', label: 'One lowercase letter' },
-  { key: 'hasUppercase', label: 'One uppercase letter' },
-  { key: 'hasNumber', label: 'One number' },
-  { key: 'hasSymbol', label: 'One symbol' },
+const getRequirements = (t: TFunction): { key: keyof Omit<PasswordChecks, 'isValid'>; label: string }[] => [
+  { key: 'hasMinLength', label: t('changePassword.requirements.minLength') },
+  { key: 'hasLowercase', label: t('changePassword.requirements.lowercase') },
+  { key: 'hasUppercase', label: t('changePassword.requirements.uppercase') },
+  { key: 'hasNumber', label: t('changePassword.requirements.number') },
+  { key: 'hasSymbol', label: t('changePassword.requirements.symbol') },
 ];
 
 function RequirementRow({ met, label }: { met: boolean; label: string }) {
+  const styles = useScriptStyles(baseStyles);
   return (
     <View style={styles.row}>
       <Ionicons
@@ -51,20 +55,22 @@ function RequirementRow({ met, label }: { met: boolean; label: string }) {
 }
 
 export function PasswordRequirements({ password }: { password: string }) {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const checks = useMemo(() => getPasswordChecks(password), [password]);
 
   if (checks.isValid) return null;
 
   return (
     <View style={styles.container}>
-      {REQUIREMENTS.map(({ key, label }) => (
+      {getRequirements(t).map(({ key, label }) => (
         <RequirementRow key={key} met={checks[key]} label={label} />
       ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     marginTop: 12,
     marginBottom: 16,

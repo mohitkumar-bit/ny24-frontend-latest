@@ -4,6 +4,7 @@ import { isRunningInExpoGo } from 'expo';
 import * as Device from 'expo-device';
 import { notificationService } from './notification.service';
 import { tokenStorage } from './tokenStorage';
+import i18n from '@/i18n';
 import {
   getExpoNotifications,
   shouldSkipExpoNotificationsModule,
@@ -34,7 +35,7 @@ export async function setupNotificationChannels() {
   if (!Notifications) return;
 
   await Notifications.setNotificationChannelAsync('default', {
-    name: 'General',
+    name: i18n.t('notifications.channels.general'),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#FF9500',
@@ -42,7 +43,7 @@ export async function setupNotificationChannels() {
   });
 
   await Notifications.setNotificationChannelAsync('chat', {
-    name: 'Chat Messages',
+    name: i18n.t('notifications.channels.chat'),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#FF9500',

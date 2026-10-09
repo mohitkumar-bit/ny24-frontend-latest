@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Alert } from
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
 import { saveService } from '@/services/save.service';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { FeedVideoPlayer } from '@/components/home/FeedVideoPlayer';
@@ -10,6 +12,7 @@ import { FeedBanner } from '@/components/home/FeedBanner';
 import { authService } from '@/services/auth.service';
 import { checkChatLimit } from '@/services/chat.service';
 import { ReportOptionsMenu } from '@/components/ReportOptionsMenu';
+import { usePhonetic } from '@/hooks/usePhonetic';
 
 export interface Post {
   id: string;
@@ -47,6 +50,9 @@ export const FeedCard = ({
   onReportPost,
 }: FeedCardProps) => {
   const router = useRouter();
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
+  const phonetic = usePhonetic();
   const [isSaved, setIsSaved] = useState(post.isSaved || false);
   const [imageFailed, setImageFailed] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -117,7 +123,7 @@ export const FeedCard = ({
         },
       });
     } catch (error: any) {
-      Alert.alert('Chat unavailable', error?.message || 'Could not start chat');
+      Alert.alert(t('feed.chatUnavailable'), error?.message || t('feed.couldNotStartChat'));
     }
   };
 
@@ -140,7 +146,7 @@ export const FeedCard = ({
       }
       onReportPost?.(post.id);
     } catch {
-      Alert.alert('Error', 'Please log in to report this post');
+      Alert.alert(t('common.error'), t('feed.loginToReport'));
     }
   };
 
@@ -156,12 +162,12 @@ export const FeedCard = ({
               {post.authorProfilePicture ? (
                 <Image source={{ uri: post.authorProfilePicture }} style={styles.promoAvatarImage} />
               ) : (
-                <Text style={styles.promoAvatarText}>{post.author?.[0] || '?'}</Text>
+                <Text style={styles.promoAvatarText}>{phonetic(post.author)?.[0] || '?'}</Text>
               )}
             </View>
             <View style={styles.promoAuthorNameRow}>
               <Text style={styles.promoAuthorName} numberOfLines={1}>
-                {post.author}
+                {phonetic(post.author)}
               </Text>
               {post.authorIsVerified ? <VerifiedBadge size={14} /> : null}
             </View>
@@ -174,7 +180,7 @@ export const FeedCard = ({
                   buttonStyle={styles.promoActionBtn}
                   iconColor="#fff"
                   iconSize={18}
-                  reportLabel="Report"
+                  reportLabel={t('common.report')}
                 />
                 {post.authorId ? (
                   <TouchableOpacity
@@ -238,11 +244,11 @@ export const FeedCard = ({
               {post.isFeatured && (
                 <View style={[styles.badge, styles.featuredBadge]}>
                   <Ionicons name="star" size={12} color="#fff" style={styles.badgeIcon} />
-                  <Text style={styles.badgeText}>Featured</Text>
+                  <Text style={styles.badgeText}>{t('feed.featured')}</Text>
                 </View>
               )}
               <View style={[styles.badge, styles.categoryBadge]}>
-                <Text style={styles.badgeText}>{post.category}</Text>
+                <Text style={styles.badgeText}>{phonetic(post.category)}</Text>
               </View>
             </View>
           </View>
@@ -250,7 +256,7 @@ export const FeedCard = ({
           <TouchableOpacity style={styles.content} activeOpacity={0.9} onPress={openDetails}>
         <View style={styles.headerRow}>
           <Text style={styles.title} numberOfLines={2}>
-            {post.title}
+            {phonetic(post.title)}
           </Text>
           <View style={styles.headerActions}>
             {!isOwnPost ? (
@@ -259,7 +265,7 @@ export const FeedCard = ({
                 buttonStyle={styles.reportBtn}
                 iconColor="#94A3B8"
                 iconSize={20}
-                reportLabel="Report"
+                reportLabel={t('common.report')}
               />
             ) : null}
             <TouchableOpacity
@@ -279,12 +285,12 @@ export const FeedCard = ({
 
         <View style={styles.locationRow}>
           <Ionicons name="location-outline" size={16} color="#666" />
-          <Text style={styles.locationText}>{post.location}</Text>
+          <Text style={styles.locationText}>{phonetic(post.location)}</Text>
         </View>
 
         <View style={styles.priceRow}>
           <Text style={styles.price}>{post.price}</Text>
-          <Text style={styles.serviceText}>/service</Text>
+          <Text style={styles.serviceText}>{t('feed.perService')}</Text>
         </View>
 
         {/* Footer */}
@@ -294,11 +300,11 @@ export const FeedCard = ({
               {post.authorProfilePicture ? (
                 <Image source={{ uri: post.authorProfilePicture }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarText}>{post.author[0]}</Text>
+                <Text style={styles.avatarText}>{phonetic(post.author)[0]}</Text>
               )}
             </View>
             <View style={styles.authorNameRow}>
-              <Text style={styles.authorName}>{post.author}</Text>
+              <Text style={styles.authorName}>{phonetic(post.author)}</Text>
               {post.authorIsVerified && <VerifiedBadge size={14} />}
             </View>
           </View>
@@ -311,7 +317,7 @@ export const FeedCard = ({
   );
 };
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 25,

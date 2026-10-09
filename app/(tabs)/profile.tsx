@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,12 +18,14 @@ import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { authService } from '@/services/auth.service';
 import { handleAuthFailure } from '@/services/authSession';
 import { Skeleton } from '@/components/Skeleton';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { LimitModal } from '@/components/LimitModal';
 import type { User } from '@/types';
+import { APP_STORE_URL, PLAY_STORE_URL, WEBSITE_URL } from '@/constants/appLinks';
 
 const ProfileMenuItem = ({
   icon,
@@ -48,6 +51,7 @@ const ProfileMenuItem = ({
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const tabBarClearance = 60 + (insets.bottom > 0 ? insets.bottom : 10);
   const [user, setUser] = React.useState<User | null>(null);
@@ -56,6 +60,22 @@ export default function ProfileScreen() {
   const [showPhotoOptions, setShowPhotoOptions] = React.useState(false);
   const [showVerifyUpgradeModal, setShowVerifyUpgradeModal] = React.useState(false);
   const [showVerifyPendingModal, setShowVerifyPendingModal] = React.useState(false);
+
+  const handleShareApp = async () => {
+    const links = [
+      `${t('profile.shareAndroid')}: ${PLAY_STORE_URL}`,
+      `${t('profile.shareIos')}: ${APP_STORE_URL}`,
+      `${t('profile.shareWebsite')}: ${WEBSITE_URL}`,
+    ].join('\n');
+    try {
+      await Share.share({
+        title: t('profile.shareTitle'),
+        message: t('profile.shareMessage', { links }),
+      });
+    } catch {
+      // Share sheet dismissed or unavailable
+    }
+  };
   const [showRemovePhotoConfirm, setShowRemovePhotoConfirm] = React.useState(false);
   const [showViewPhoto, setShowViewPhoto] = React.useState(false);
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = React.useState(false);
@@ -102,7 +122,7 @@ export default function ProfileScreen() {
     try {
       const updatedUser = await authService.uploadProfilePicture(uri);
       setUser(updatedUser);
-      Alert.alert('Success', 'Profile picture updated.');
+      Alert.alert(t('common.success'), t('profile.photoUpdated'));
     } catch (err: any) {
       const raw = err.response?.data;
       const status = err.response?.status;
@@ -112,13 +132,13 @@ export default function ProfileScreen() {
         /413|Request Entity Too Large|too large/i.test(String(asText));
 
       Alert.alert(
-        'Upload failed',
+        t('profile.uploadFailed'),
         isTooLarge
-          ? 'Photo is too large for the server. Try a smaller image or lower quality photo.'
+          ? t('profile.photoTooLarge')
           : (typeof raw === 'object' && raw?.message) ||
               (typeof asText === 'string' && !asText.includes('<html')
                 ? asText
-                : 'Could not update profile picture. Try again.')
+                : t('profile.photoUpdateFailed'))
       );
     } finally {
       setUploadingPhoto(false);
@@ -132,8 +152,8 @@ export default function ProfileScreen() {
       setUser(updatedUser);
     } catch (err: any) {
       Alert.alert(
-        'Remove failed',
-        err.response?.data?.message || 'Could not remove profile picture. Try again.'
+        t('profile.removeFailed'),
+        err.response?.data?.message || t('profile.photoRemoveFailed')
       );
     } finally {
       setUploadingPhoto(false);
@@ -173,10 +193,10 @@ export default function ProfileScreen() {
 
   const currentPlanLabel =
     user?.subscription?.plan === 'business'
-      ? 'Business'
+      ? t('profile.plans.business')
       : user?.subscription?.plan === 'pro'
-        ? 'Pro'
-        : 'Free';
+        ? t('profile.plans.pro')
+        : t('profile.plans.free');
 
   return (
     <View style={styles.container}>
@@ -194,7 +214,7 @@ export default function ProfileScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Profile</Text>
+            <Text style={styles.headerTitle}>{t('profile.title')}</Text>
           </View>
 
           {/* User Section */}
@@ -235,7 +255,7 @@ export default function ProfileScreen() {
                     )}
                   </View>
                 </TouchableOpacity>
-                <Text style={styles.changePhotoHint}>Tap photo to update</Text>
+                <Text style={styles.changePhotoHint}>{t('profile.tapPhotoToUpdate')}</Text>
 
                 <View style={styles.nameRow}>
                   <Text style={styles.name}>{user?.name}</Text>
@@ -253,7 +273,7 @@ export default function ProfileScreen() {
                     >
                       <Ionicons name="shield-checkmark" size={12} color="#fff" />
                       <Text style={styles.verifyChipText}>
-                        {user?.verificationStatus === 'pending' ? 'Pending' : 'Verify'}
+                        {user?.verificationStatus === 'pending' ? t('profile.verifyChip.pending') : t('profile.verifyChip.verify')}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -263,7 +283,7 @@ export default function ProfileScreen() {
                 <View style={styles.locationContainer}>
                   <Ionicons name="location-sharp" size={16} color="#ccc" />
                   <Text style={styles.locationText}>
-                    {user?.location || 'Location not set'}
+                    {user?.location || t('profile.locationNotSet')}
                   </Text>
                 </View>
 
@@ -271,7 +291,7 @@ export default function ProfileScreen() {
                   style={styles.editBtn}
                   onPress={() => router.push('/edit-profile' as any)}
                 >
-                  <Text style={styles.editBtnText}>Edit Profile</Text>
+                  <Text style={styles.editBtnText}>{t('profile.editProfile')}</Text>
                 </TouchableOpacity>
 
                 {!user?.isWorker && (
@@ -284,7 +304,7 @@ export default function ProfileScreen() {
                       style={styles.workerBtnGradient}
                     >
                       <Ionicons name="briefcase" size={20} color="#fff" />
-                      <Text style={styles.workerBtnText}>Become a Worker</Text>
+                      <Text style={styles.workerBtnText}>{t('profile.becomeWorker')}</Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
@@ -296,57 +316,67 @@ export default function ProfileScreen() {
           <View style={styles.menuSection}>
             <ProfileMenuItem
               icon="megaphone-outline"
-              title="My Ads"
+              title={t('profile.menu.myAds')}
               onPress={() => router.push('/my-ads' as any)}
             />
             {!loading && user?.isWorker && (
               <ProfileMenuItem
                 icon="briefcase-outline"
-                title="Working Profile"
+                title={t('profile.menu.workingProfile')}
                 onPress={() => router.push('/worker-profile' as any)}
               />
             )}
             <ProfileMenuItem
               icon="bookmark-outline"
-              title="Saved Jobs"
+              title={t('profile.menu.savedJobs')}
               onPress={() => router.push('/saved' as any)}
+            />
+            <ProfileMenuItem
+              icon="share-social-outline"
+              title={t('profile.menu.shareApp')}
+              onPress={handleShareApp}
+            />
+            <ProfileMenuItem
+              icon="language-outline"
+              title={t('language.menuLabel')}
+              onPress={() => router.push('/language' as any)}
             />
 
             <View style={styles.sectionDivider} />
-            <Text style={styles.sectionSubtitle}>Support & Legal</Text>
+            <Text style={styles.sectionSubtitle}>{t('profile.supportLegal')}</Text>
 
             <ProfileMenuItem
               icon="information-circle-outline"
-              title="About Us"
+              title={t('profile.menu.aboutUs')}
               onPress={() => router.push('/about' as any)}
             />
             <ProfileMenuItem
               icon="help-buoy-outline"
-              title="Help & Support"
+              title={t('profile.menu.helpSupport')}
               onPress={() => router.push('/support' as any)}
             />
             <ProfileMenuItem
               icon="document-text-outline"
-              title="Terms & Conditions"
+              title={t('profile.menu.terms')}
               onPress={() => router.push('/terms' as any)}
             />
             <ProfileMenuItem
               icon="shield-checkmark-outline"
-              title="Privacy Policy"
+              title={t('profile.menu.privacy')}
               onPress={() => router.push('/privacy' as any)}
             />
 
             <View style={styles.sectionDivider} />
             <ProfileMenuItem
               icon="trash-outline"
-              title="Delete Account"
+              title={t('profile.menu.deleteAccount')}
               textColor="#FF4D4D"
               onPress={() => setShowDeleteAccountConfirm(true)}
               iconColor="#FF4D4D"
             />
             <ProfileMenuItem
               icon="log-out-outline"
-              title="Logout"
+              title={t('common.logout')}
               onPress={handleLogout}
               textColor="#FF4D4D"
               iconColor="#FF4D4D"
@@ -358,8 +388,8 @@ export default function ProfileScreen() {
       <LimitModal
         visible={showVerifyUpgradeModal}
         onClose={() => setShowVerifyUpgradeModal(false)}
-        title="Verification"
-        message="You have to complete 180 days of logins to reach verification badge."
+        title={t('profile.verification')}
+        message={t('profile.verifyUpgradeMessage')}
         plan={currentPlanLabel}
         icon="shield-checkmark-outline"
       />
@@ -373,15 +403,15 @@ export default function ProfileScreen() {
         <View style={styles.pendingModalOverlay}>
           <View style={styles.pendingModalCard}>
             <Ionicons name="time-outline" size={40} color="#64748B" />
-            <Text style={styles.pendingModalTitle}>Verification pending</Text>
+            <Text style={styles.pendingModalTitle}>{t('profile.verifyPending.title')}</Text>
             <Text style={styles.pendingModalText}>
-              Your documents are under review. We will notify you once approved.
+              {t('profile.verifyPending.message')}
             </Text>
             <TouchableOpacity
               style={styles.pendingModalBtn}
               onPress={() => setShowVerifyPendingModal(false)}
             >
-              <Text style={styles.pendingModalBtnText}>OK</Text>
+              <Text style={styles.pendingModalBtnText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -396,22 +426,22 @@ export default function ProfileScreen() {
         <View style={styles.pendingModalOverlay}>
           <View style={styles.pendingModalCard}>
             <Ionicons name="warning-outline" size={40} color="#EF4444" />
-            <Text style={styles.pendingModalTitle}>Delete account?</Text>
+            <Text style={styles.pendingModalTitle}>{t('profile.deleteAccount.title')}</Text>
             <Text style={styles.pendingModalText}>
-              Are you sure you want to delete your account? Your request will be processed within 48 hours. After that, your account and data will be permanently removed.
+              {t('profile.deleteAccount.message')}
             </Text>
             <View style={styles.removeConfirmActions}>
               <TouchableOpacity
                 style={styles.removeCancelBtn}
                 onPress={() => setShowDeleteAccountConfirm(false)}
               >
-                <Text style={styles.removeCancelText}>Cancel</Text>
+                <Text style={styles.removeCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.removeConfirmBtn}
                 onPress={confirmDeleteAccount}
               >
-                <Text style={styles.removeConfirmText}>Yes, delete</Text>
+                <Text style={styles.removeConfirmText}>{t('profile.deleteAccount.confirm')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -427,15 +457,15 @@ export default function ProfileScreen() {
         <View style={styles.pendingModalOverlay}>
           <View style={styles.pendingModalCard}>
             <Ionicons name="checkmark-circle-outline" size={40} color="#22C55E" />
-            <Text style={styles.pendingModalTitle}>Request submitted</Text>
+            <Text style={styles.pendingModalTitle}>{t('profile.deleteRequest.title')}</Text>
             <Text style={styles.pendingModalText}>
-              Your account deletion request has been submitted. It will be processed within 48 hours. You can continue using the app until then.
+              {t('profile.deleteRequest.message')}
             </Text>
             <TouchableOpacity
               style={styles.pendingModalBtn}
               onPress={() => setShowDeleteAccountSuccess(false)}
             >
-              <Text style={styles.pendingModalBtnText}>OK</Text>
+              <Text style={styles.pendingModalBtnText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -450,9 +480,9 @@ export default function ProfileScreen() {
         <View style={styles.pendingModalOverlay}>
           <View style={styles.pendingModalCard}>
             <Ionicons name="trash-outline" size={40} color="#EF4444" />
-            <Text style={styles.pendingModalTitle}>Remove profile photo?</Text>
+            <Text style={styles.pendingModalTitle}>{t('profile.removePhoto.title')}</Text>
             <Text style={styles.pendingModalText}>
-              Your profile will show your initial instead.
+              {t('profile.removePhoto.message')}
             </Text>
             <View style={styles.removeConfirmActions}>
               <TouchableOpacity
@@ -460,7 +490,7 @@ export default function ProfileScreen() {
                 onPress={() => setShowRemovePhotoConfirm(false)}
                 disabled={uploadingPhoto}
               >
-                <Text style={styles.removeCancelText}>Cancel</Text>
+                <Text style={styles.removeCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.removeConfirmBtn, uploadingPhoto && { opacity: 0.7 }]}
@@ -470,7 +500,7 @@ export default function ProfileScreen() {
                 {uploadingPhoto ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.removeConfirmText}>Remove</Text>
+                  <Text style={styles.removeConfirmText}>{t('common.remove')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -481,34 +511,34 @@ export default function ProfileScreen() {
       <Modal visible={showPhotoOptions} transparent animationType="slide">
         <View style={styles.photoModalOverlay}>
           <View style={styles.photoModalSheet}>
-            <Text style={styles.photoModalTitle}>Update profile photo</Text>
+            <Text style={styles.photoModalTitle}>{t('profile.photoOptions.title')}</Text>
             {user?.profilePicture ? (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={handleViewPhoto}>
                 <Ionicons name="eye-outline" size={22} color="#FF9500" />
-                <Text style={styles.photoOptionText}>View Photo</Text>
+                <Text style={styles.photoOptionText}>{t('profile.photoOptions.view')}</Text>
               </TouchableOpacity>
             ) : null}
             {Platform.OS !== 'web' && (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={pickFromCamera}>
                 <Ionicons name="camera-outline" size={22} color="#FF9500" />
-                <Text style={styles.photoOptionText}>Take Photo</Text>
+                <Text style={styles.photoOptionText}>{t('profile.photoOptions.take')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.photoOptionBtn} onPress={pickFromGallery}>
               <Ionicons name="images-outline" size={22} color="#FF9500" />
-              <Text style={styles.photoOptionText}>Choose from Gallery</Text>
+              <Text style={styles.photoOptionText}>{t('profile.photoOptions.gallery')}</Text>
             </TouchableOpacity>
             {user?.profilePicture ? (
               <TouchableOpacity style={styles.photoOptionBtn} onPress={handleRemovePhoto}>
                 <Ionicons name="trash-outline" size={22} color="#EF4444" />
-                <Text style={[styles.photoOptionText, styles.photoRemoveText]}>Remove Photo</Text>
+                <Text style={[styles.photoOptionText, styles.photoRemoveText]}>{t('profile.photoOptions.remove')}</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
               style={styles.photoCancelBtn}
               onPress={() => setShowPhotoOptions(false)}
             >
-              <Text style={styles.photoCancelText}>Cancel</Text>
+              <Text style={styles.photoCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

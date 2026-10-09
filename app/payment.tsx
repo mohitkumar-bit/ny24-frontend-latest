@@ -3,15 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
-  PROFESSIONAL_TOOLS_INACTIVE_TITLE,
-} from '@/utils/professionalTools';
+import { useTranslation } from 'react-i18next';
 
 /** Payment gateway is disabled in the app. */
 export default function PaymentScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
@@ -22,10 +20,10 @@ export default function PaymentScreen() {
         <View style={styles.iconWrap}>
           <Ionicons name="card-outline" size={36} color="#FF9500" />
         </View>
-        <Text style={styles.title}>{PROFESSIONAL_TOOLS_INACTIVE_TITLE}</Text>
-        <Text style={styles.message}>{PROFESSIONAL_TOOLS_INACTIVE_MESSAGE}</Text>
+        <Text style={styles.title}>{t('professionalTools.inactiveTitle')}</Text>
+        <Text style={styles.message}>{t('professionalTools.inactiveMessage')}</Text>
         <TouchableOpacity style={styles.okBtn} onPress={() => router.back()}>
-          <Text style={styles.okText}>OK</Text>
+          <Text style={styles.okText}>{t('common.ok')}</Text>
         </TouchableOpacity>
       </View>
     </View>

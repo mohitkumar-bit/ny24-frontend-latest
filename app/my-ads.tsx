@@ -15,9 +15,16 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
 import { jobService, JobPost } from '@/services/job.service';
 import { Skeleton } from '@/components/Skeleton';
-import { formatFeaturedTimeLeft, getFeaturedEndsAt } from '@/utils/formatTime';
+import {
+  formatFeaturedTimeLeft,
+  getBoostDaysIfStartedNow,
+  getFeaturedEndsAt,
+  getPostExpiresAt,
+} from '@/utils/formatTime';
 import { showProfessionalToolsInactive } from '@/utils/professionalTools';
 
 interface MyAd {
@@ -27,13 +34,19 @@ interface MyAd {
   price: string;
   isFeatured: boolean;
   featuredEndsAt: number | null;
+  postEndsAt: number | null;
 }
 
+const isAdArchived = (ad: MyAd, now: number) => ad.postEndsAt == null || ad.postEndsAt <= now;
+
 export default function MyAdsScreen() {
+  const { t } = useTranslation();
+  const phonetic = usePhonetic();
   const router = useRouter();
   const [ads, setAds] = React.useState<MyAd[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [featuringId, setFeaturingId] = React.useState<string | null>(null);
+  const [repostingId, setRepostingId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [featureConfirmAd, setFeatureConfirmAd] = React.useState<MyAd | null>(null);
   const [now, setNow] = React.useState(Date.now());
@@ -49,8 +62,8 @@ export default function MyAdsScreen() {
   }, []);
 
   React.useEffect(() => {
-    const hasFeatured = ads.some((ad) => ad.isFeatured && ad.featuredEndsAt);
-    if (!hasFeatured) return;
+    const hasLiveAd = ads.some((ad) => !isAdArchived(ad, Date.now()));
+    if (!hasLiveAd) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [ads]);
@@ -72,12 +85,11 @@ export default function MyAdsScreen() {
         title: job.title,
         category: job.categories && job.categories.length > 0
           ? job.categories.map((c: any) => c.name).join(', ')
-          : 'General',
+          : '',
         price: `₹${job.price}`,
         isFeatured: !!job.isFeatured,
-        featuredEndsAt: job.isFeatured
-          ? getFeaturedEndsAt(job.featuredAt, job.createdAt)
-          : null,
+        featuredEndsAt: job.isFeatured ? getFeaturedEndsAt(job) : null,
+        postEndsAt: getPostExpiresAt(job),
       }));
       setAds(mappedAds);
     } catch (error) {
@@ -98,31 +110,64 @@ export default function MyAdsScreen() {
       const order = await jobService.createFeatureOrder(jobId);
       setFeatureConfirmAd(null);
       if (!order.paid) {
-        Alert.alert('Featured', order.message || 'This post is now featured.');
+        Alert.alert(t('myAds.featured'), order.message || t('myAds.featuredSuccess'));
         fetchMyAds();
         return;
       }
       showProfessionalToolsInactive();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not feature this post');
+      Alert.alert(t('common.error'), err.response?.data?.message || t('myAds.featureFailed'));
     } finally {
       setFeaturingId(null);
     }
   };
 
-  const planLabel = plan === 'business' ? 'Business' : plan === 'pro' ? 'Pro' : 'Free';
+  const repost = async (ad: MyAd) => {
+    try {
+      setRepostingId(ad.id);
+      const result = await jobService.repostJob(ad.id);
+      Alert.alert(t('myAds.repostedTitle'), result.message || t('myAds.repostedMessage'));
+      fetchMyAds();
+    } catch (err: any) {
+      Alert.alert(t('common.error'), err.response?.data?.message || t('myAds.repostFailed'));
+    } finally {
+      setRepostingId(null);
+    }
+  };
+
+  const handleRepost = (ad: MyAd) => {
+    Alert.alert(t('myAds.repostConfirmTitle'), t('myAds.repostConfirmMessage', { title: ad.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('myAds.repost'), onPress: () => repost(ad) },
+    ]);
+  };
+
+  const planLabel =
+    plan === 'business'
+      ? t('myAds.planBusiness')
+      : plan === 'pro'
+        ? t('myAds.planPro')
+        : t('myAds.planFree');
+
+  const categoryLabel = (ad: MyAd) => ad.category || t('myAds.generalCategory');
 
   const filteredAds = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return ads.filter((ad) => {
+    const loadedAt = Date.now();
+    const matches = ads.filter((ad) => {
       if (!q) return true;
       return (
         ad.title.toLowerCase().includes(q) ||
-        ad.category.toLowerCase().includes(q) ||
+        (ad.category || t('myAds.generalCategory')).toLowerCase().includes(q) ||
         ad.price.toLowerCase().includes(q)
       );
     });
-  }, [ads, searchQuery]);
+    // Live posts first, archived ones below; order within each group is unchanged.
+    return [
+      ...matches.filter((ad) => !isAdArchived(ad, loadedAt)),
+      ...matches.filter((ad) => isAdArchived(ad, loadedAt)),
+    ];
+  }, [ads, searchQuery, t]);
 
   const renderQuotaHeader = () => {
     if (!quota) return null;
@@ -140,52 +185,55 @@ export default function MyAdsScreen() {
     const postsProgress = postsLimit > 0 ? Math.min(100, (postsUsed / postsLimit) * 100) : 0;
     const boostsProgress =
       featuredLimit > 0 ? Math.min(100, (featuredUsed / featuredLimit) * 100) : 0;
-    let postsFootnote = `${postsUsed} of ${postsLimit} plan posts used`;
-    if (extraPosts > 0) {
-      postsFootnote += ` · ${extraPosts} rolled over`;
-    }
-    let boostsFootnote =
+    const postsFootnote =
+      postsLimit === 0 && extraPosts === 0
+        ? ''
+        : extraPosts > 0
+          ? t('myAds.postsUsedRollover', { used: postsUsed, limit: postsLimit, extra: extraPosts })
+          : t('myAds.postsUsed', { used: postsUsed, limit: postsLimit });
+    const boostsFootnote =
       featuredLimit === 0
         ? extraBoosts > 0
-          ? `${extraBoosts} rolled over boost${extraBoosts === 1 ? '' : 's'}`
-          : 'Get free once you complete 30 day login'
-        : `${featuredUsed} of ${featuredLimit} plan boosts used`;
-    if (featuredLimit > 0 && extraBoosts > 0) {
-      boostsFootnote += ` · ${extraBoosts} rolled over`;
-    }
+          ? extraBoosts === 1
+            ? t('myAds.boostRolledOverOne', { extra: extraBoosts })
+            : t('myAds.boostRolledOverMany', { extra: extraBoosts })
+          : ''
+        : extraBoosts > 0
+          ? t('myAds.boostsUsedRollover', { used: featuredUsed, limit: featuredLimit, extra: extraBoosts })
+          : t('myAds.boostsUsed', { used: featuredUsed, limit: featuredLimit });
 
     return (
       <View style={styles.quotaPanel}>
         <View style={styles.quotaPanelHeader}>
           <View style={styles.quotaPanelTitleRow}>
-            <Text style={styles.quotaPanelTitle}>This month</Text>
+            <Text style={styles.quotaPanelTitle}>{t('myAds.thisMonth')}</Text>
             <View style={styles.planPill}>
               <Text style={styles.planPillText}>{planLabel}</Text>
             </View>
           </View>
           <Text style={styles.quotaPanelSubtitle}>
-            Plan slots reset monthly.
+            {t('myAds.slotsResetMonthly')}
           </Text>
         </View>
 
         <View style={styles.quotaSection}>
-          <Text style={styles.quotaSectionLabel}>Included with your plan</Text>
+          <Text style={styles.quotaSectionLabel}>{t('myAds.includedWithPlan')}</Text>
           <View style={styles.quotaGrid}>
             <View style={[styles.quotaMiniCard, styles.quotaMiniCardPlan]}>
               <View style={styles.quotaMiniCardHead}>
                 <View style={styles.quotaMiniIconPlan}>
                   <Ionicons name="document-text-outline" size={14} color="#D99D00" />
                 </View>
-                <Text style={styles.quotaMiniLabel}>Plan posts</Text>
+                <Text style={styles.quotaMiniLabel}>{t('myAds.planPosts')}</Text>
               </View>
               <View style={styles.quotaMiniMetric}>
                 <Text style={styles.quotaMiniValue}>{postsLeft}</Text>
-                <Text style={styles.quotaMiniUnit}>remaining</Text>
+                <Text style={styles.quotaMiniUnit}>{t('myAds.remaining')}</Text>
               </View>
               <View style={styles.quotaProgressTrack}>
                 <View style={[styles.quotaProgressFill, { width: `${postsProgress}%` }]} />
               </View>
-              <Text style={styles.quotaMiniFootnote}>{postsFootnote}</Text>
+              {postsFootnote ? <Text style={styles.quotaMiniFootnote}>{postsFootnote}</Text> : null}
             </View>
 
             <View style={[styles.quotaMiniCard, styles.quotaMiniCardPlan]}>
@@ -193,16 +241,16 @@ export default function MyAdsScreen() {
                 <View style={styles.quotaMiniIconPlan}>
                   <Ionicons name="star-outline" size={14} color="#D99D00" />
                 </View>
-                <Text style={styles.quotaMiniLabel}>Plan boosts</Text>
+                <Text style={styles.quotaMiniLabel}>{t('myAds.planBoosts')}</Text>
               </View>
               <View style={styles.quotaMiniMetric}>
                 <Text style={styles.quotaMiniValue}>{featuredLeft}</Text>
-                <Text style={styles.quotaMiniUnit}>remaining</Text>
+                <Text style={styles.quotaMiniUnit}>{t('myAds.remaining')}</Text>
               </View>
               <View style={styles.quotaProgressTrack}>
                 <View style={[styles.quotaProgressFill, { width: `${boostsProgress}%` }]} />
               </View>
-              <Text style={styles.quotaMiniFootnote}>{boostsFootnote}</Text>
+              {boostsFootnote ? <Text style={styles.quotaMiniFootnote}>{boostsFootnote}</Text> : null}
             </View>
           </View>
         </View>
@@ -210,41 +258,59 @@ export default function MyAdsScreen() {
     );
   };
 
-  const renderAdCard = ({ item }: { item: MyAd }) => (
+  const renderAdCard = ({ item }: { item: MyAd }) => {
+    const archived = isAdArchived(item, now);
+    const boosted =
+      !archived && item.isFeatured && item.featuredEndsAt != null && item.featuredEndsAt > now;
+    const canBoost = !archived && !boosted && getBoostDaysIfStartedNow(item.postEndsAt, now) > 0;
+
+    return (
     <TouchableOpacity
-      style={[styles.card, item.isFeatured && styles.cardFeatured]}
+      style={[styles.card, boosted && styles.cardFeatured, archived && styles.cardArchived]}
       activeOpacity={0.8}
       onPress={() => router.push(`/details/${item.id}` as any)}
     >
       <View style={styles.cardContent}>
-        <View style={[styles.iconContainer, item.isFeatured && styles.iconContainerFeatured]}>
+        <View style={[styles.iconContainer, boosted && styles.iconContainerFeatured]}>
           <Ionicons
-            name="briefcase"
+            name={archived ? 'archive-outline' : 'briefcase'}
             size={22}
-            color={item.isFeatured ? '#B45309' : '#475569'}
+            color={boosted ? '#B45309' : archived ? '#94A3B8' : '#475569'}
           />
         </View>
 
         <View style={styles.infoContainer}>
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, archived && styles.titleArchived]} numberOfLines={1}>
               {item.title}
             </Text>
-            {item.isFeatured ? (
+            {boosted ? (
               <View style={styles.featuredBadge}>
                 <Ionicons name="star" size={10} color="#fff" />
-                <Text style={styles.featuredBadgeText}>Featured</Text>
+                <Text style={styles.featuredBadgeText}>{t('myAds.featured')}</Text>
+              </View>
+            ) : null}
+            {archived ? (
+              <View style={styles.archivedBadge}>
+                <Text style={styles.archivedBadgeText}>{t('myAds.archived')}</Text>
               </View>
             ) : null}
           </View>
-          <Text style={styles.category} numberOfLines={1}>{item.category}</Text>
+          <Text style={styles.category} numberOfLines={1}>{phonetic(categoryLabel(item))}</Text>
           <View style={styles.metaRow}>
             <Text style={styles.price}>{item.price}</Text>
-            {item.isFeatured && item.featuredEndsAt ? (
+            {boosted && item.featuredEndsAt ? (
+              <View style={styles.featureTimer}>
+                <Ionicons name="star-outline" size={12} color="#B45309" />
+                <Text style={styles.featureTimerText}>
+                  {formatFeaturedTimeLeft(item.featuredEndsAt, now)}
+                </Text>
+              </View>
+            ) : !archived && item.postEndsAt ? (
               <View style={styles.featureTimer}>
                 <Ionicons name="time-outline" size={13} color="#64748B" />
                 <Text style={styles.featureTimerText}>
-                  {formatFeaturedTimeLeft(item.featuredEndsAt, now)}
+                  {formatFeaturedTimeLeft(item.postEndsAt, now)}
                 </Text>
               </View>
             ) : null}
@@ -252,7 +318,26 @@ export default function MyAdsScreen() {
         </View>
 
         <View style={styles.rightSection}>
-          {!item.isFeatured && canBuyAddons ? (
+          {archived ? (
+            <TouchableOpacity
+              style={styles.repostBtn}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleRepost(item);
+              }}
+              disabled={repostingId === item.id}
+              activeOpacity={0.85}
+            >
+              {repostingId === item.id ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={13} color="#fff" />
+                  <Text style={styles.featureBtnText}>{t('myAds.repost')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : canBoost && canBuyAddons ? (
             <TouchableOpacity
               style={styles.featureBtn}
               onPress={(e) => {
@@ -268,7 +353,7 @@ export default function MyAdsScreen() {
                 <>
                   <Ionicons name="star" size={13} color="#fff" />
                   <Text style={styles.featureBtnText}>
-                    {canFeatureFree ? 'Feature' : 'Feature'}
+                    {canFeatureFree ? t('myAds.feature') : t('myAds.feature')}
                   </Text>
                 </>
               )}
@@ -279,7 +364,8 @@ export default function MyAdsScreen() {
         </View>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -290,7 +376,7 @@ export default function MyAdsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Ads</Text>
+        <Text style={styles.headerTitle}>{t('myAds.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -298,7 +384,7 @@ export default function MyAdsScreen() {
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={18} color="#999" style={styles.searchIcon} />
           <TextInput
-            placeholder="Search your posts..."
+            placeholder={t('myAds.searchPlaceholder')}
             placeholderTextColor="#999"
             style={styles.searchInput}
             value={searchQuery}
@@ -342,8 +428,8 @@ export default function MyAdsScreen() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {ads.length === 0
-                  ? "You haven't posted any ads yet."
-                  : 'No posts match your search.'}
+                  ? t('myAds.noAdsYet')
+                  : t('myAds.noSearchResults')}
               </Text>
             </View>
           ) : null
@@ -364,11 +450,17 @@ export default function MyAdsScreen() {
             <View style={styles.confirmIconWrap}>
               <Ionicons name="star" size={22} color="#FF9500" />
             </View>
-            <Text style={styles.confirmTitle}>Feature this post?</Text>
+            <Text style={styles.confirmTitle}>{t('myAds.confirmTitle')}</Text>
             <Text style={styles.confirmMessage}>
               {canFeatureFree
-                ? `“${featureConfirmAd?.title}” will be featured for 30 days using your included featured slot.`
-                : 'Professional tools are not active. Paid featuring is unavailable in the app right now.'}
+                ? (() => {
+                    const days = getBoostDaysIfStartedNow(featureConfirmAd?.postEndsAt ?? null, now);
+                    return t(days === 1 ? 'myAds.confirmMessageOneDay' : 'myAds.confirmMessage', {
+                      title: featureConfirmAd?.title,
+                      days,
+                    });
+                  })()
+                : t('myAds.paidFeatureInactive')}
             </Text>
             <View style={styles.confirmActions}>
               <TouchableOpacity
@@ -376,7 +468,7 @@ export default function MyAdsScreen() {
                 onPress={() => setFeatureConfirmAd(null)}
                 disabled={!!featuringId}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.confirmOkBtn}
@@ -387,7 +479,7 @@ export default function MyAdsScreen() {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.confirmOkText}>
-                    {canFeatureFree ? 'Feature' : 'OK'}
+                    {canFeatureFree ? t('myAds.feature') : t('common.ok')}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -743,6 +835,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  repostBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#0F766E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardArchived: {
+    backgroundColor: '#F8FAFC',
+  },
+  titleArchived: {
+    color: '#64748B',
+  },
+  archivedBadge: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  archivedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
   },
   featureBtnText: {
     fontSize: 13,

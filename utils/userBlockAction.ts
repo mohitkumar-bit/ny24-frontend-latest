@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import i18n from '@/i18n';
 import { blockUser, getBlockStatus, unblockUser } from '@/services/chat.service';
 
 export async function refreshBlockStatus(userId: string) {
@@ -12,20 +13,23 @@ export function confirmBlockUser(
   onBlocked: () => void
 ) {
   Alert.alert(
-    'Block user?',
-    `${displayName} will not be able to message you.`,
+    i18n.t('block.confirmTitle'),
+    i18n.t('block.confirmMessage', { name: displayName }),
     [
-      { text: 'Cancel', style: 'cancel' },
+      { text: i18n.t('common.cancel'), style: 'cancel' },
       {
-        text: 'Block',
+        text: i18n.t('common.block'),
         style: 'destructive',
         onPress: async () => {
           try {
             await blockUser(userId);
             onBlocked();
-            Alert.alert('Blocked', 'This user has been blocked.');
+            Alert.alert(i18n.t('block.blockedTitle'), i18n.t('block.blockedMessage'));
           } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.message || 'Could not block user');
+            Alert.alert(
+              i18n.t('common.error'),
+              error.response?.data?.message || i18n.t('block.blockFailed')
+            );
           }
         },
       },
@@ -37,8 +41,11 @@ export async function unblockUserWithAlert(userId: string, onUnblocked: () => vo
   try {
     await unblockUser(userId);
     onUnblocked();
-    Alert.alert('Unblocked', 'You can message this user again.');
+    Alert.alert(i18n.t('block.unblockedTitle'), i18n.t('block.unblockedMessage'));
   } catch (error: any) {
-    Alert.alert('Error', error.response?.data?.message || 'Could not unblock user');
+    Alert.alert(
+      i18n.t('common.error'),
+      error.response?.data?.message || i18n.t('block.unblockFailed')
+    );
   }
 }

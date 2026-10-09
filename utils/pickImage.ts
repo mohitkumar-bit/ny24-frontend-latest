@@ -1,5 +1,6 @@
 import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import i18n from '@/i18n';
 
 type PickImageOptions = {
   allowsEditing?: boolean;
@@ -15,7 +16,7 @@ export async function pickImageFromLibrary(options: PickImageOptions = {}) {
   if (Platform.OS === 'ios') {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Photo library access is needed to select a photo.');
+      Alert.alert(i18n.t('media.permissionRequired'), i18n.t('media.photoLibraryAccess'));
       return null;
     }
   }
@@ -37,13 +38,13 @@ export async function pickImageFromLibrary(options: PickImageOptions = {}) {
 
 export async function pickImageFromCamera(options: PickImageOptions = {}) {
   if (Platform.OS === 'web') {
-    Alert.alert('Camera unavailable', 'Please choose a photo from your gallery on web.');
+    Alert.alert(i18n.t('media.cameraUnavailable'), i18n.t('media.cameraUnavailableWeb'));
     return null;
   }
 
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   if (status !== 'granted') {
-    Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+    Alert.alert(i18n.t('media.permissionRequired'), i18n.t('media.cameraAccess'));
     return null;
   }
 

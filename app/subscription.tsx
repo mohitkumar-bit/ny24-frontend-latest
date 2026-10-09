@@ -3,15 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  PROFESSIONAL_TOOLS_INACTIVE_MESSAGE,
-  PROFESSIONAL_TOOLS_INACTIVE_TITLE,
-} from '@/utils/professionalTools';
+import { useTranslation } from 'react-i18next';
 
 /** Subscription / payment screens are disabled in the app. */
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   useEffect(() => {
     // Keep deep links from crashing; surface the inactive notice.
@@ -26,10 +24,10 @@ export default function SubscriptionScreen() {
         <View style={styles.iconWrap}>
           <Ionicons name="construct-outline" size={36} color="#FF9500" />
         </View>
-        <Text style={styles.title}>{PROFESSIONAL_TOOLS_INACTIVE_TITLE}</Text>
-        <Text style={styles.message}>{PROFESSIONAL_TOOLS_INACTIVE_MESSAGE}</Text>
+        <Text style={styles.title}>{t('professionalTools.inactiveTitle')}</Text>
+        <Text style={styles.message}>{t('professionalTools.inactiveMessage')}</Text>
         <TouchableOpacity style={styles.okBtn} onPress={() => router.back()}>
-          <Text style={styles.okText}>OK</Text>
+          <Text style={styles.okText}>{t('common.ok')}</Text>
         </TouchableOpacity>
       </View>
     </View>

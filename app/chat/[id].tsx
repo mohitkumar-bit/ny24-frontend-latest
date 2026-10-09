@@ -15,15 +15,16 @@ import {
   ScrollView,
   Keyboard,
   Image,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from '@/utils/keyboardController';
+import { KeyboardAvoidingView, isKeyboardControllerLinked } from '@/utils/keyboardController';
 import { ReportModal } from '@/components/ReportModal';
 import { formatMessageTime } from '@/utils/formatTime';
-import { pickImageFromCamera, pickImageFromLibrary } from '@/utils/pickImage';
+import { pickImageFromLibrary } from '@/utils/pickImage';
 import { Audio } from 'expo-av';
 import {
   useAudioRecorder,
@@ -36,6 +37,7 @@ import {
   getMessages,
   sendMessage,
   uploadChatMedia,
+  googleMapsUrl,
   claimChatSlot,
   getBlockStatus,
   blockUser,
@@ -47,6 +49,11 @@ import { authService } from '../../services/auth.service';
 import { ChatEmojiPicker } from '@/components/ChatEmojiPicker';
 import { setActiveConversationId as setGlobalActiveConversationId } from '@/utils/activeChat';
 import { preventAndroidTextClip } from '@/utils/androidTextFix';
+import { useTranslation } from 'react-i18next';
+import { usePhonetic } from '@/hooks/usePhonetic';
+import { useScriptStyles } from '@/hooks/useScriptStyles';
+import { SwipeToReply } from '@/components/SwipeToReply';
+import { fetchLiveLocation, getLocationErrorMessage } from '@/services/location.service';
 
 interface Message {
   _id: string;
@@ -54,10 +61,17 @@ interface Message {
   sender: string;
   receiver?: string;
   createdAt: string;
-  messageType?: 'text' | 'call_request' | 'image' | 'audio';
+  messageType?: 'text' | 'call_request' | 'image' | 'audio' | 'location';
   callRequestStatus?: 'pending' | 'accepted' | 'declined';
   mediaUrl?: string;
   mediaDuration?: number;
+  location?: { lat: number; lng: number; address?: string };
+  replyTo?: {
+    messageId: string;
+    sender: string;
+    text?: string;
+    messageType?: Message['messageType'];
+  };
 }
 
 function formatAudioDuration(seconds?: number) {
@@ -76,6 +90,8 @@ function AudioMessageBubble({
   duration?: number;
   isMe: boolean;
 }) {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
@@ -108,7 +124,7 @@ function AudioMessageBubble({
       });
       await sound.playAsync();
     } catch {
-      Alert.alert('Playback failed', 'Could not play this voice message.');
+      Alert.alert(t('chat.playbackFailedTitle'), t('chat.playbackFailedMessage'));
       setIsPlaying(false);
     }
   };
@@ -140,8 +156,12 @@ function AudioMessageBubble({
 }
 
 export default function ChatDetailScreen() {
+  const { t } = useTranslation();
+  const styles = useScriptStyles(baseStyles);
   const params = useLocalSearchParams();
   const { id, name, avatarLetter, avatarUrl, receiverId: paramReceiverId, isSubscribed: paramIsSubscribed } = params;
+  const phonetic = usePhonetic();
+  const headerName = phonetic(typeof name === 'string' ? name : undefined);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
@@ -167,12 +187,23 @@ export default function ChatDetailScreen() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [voiceNotice, setVoiceNotice] = useState<{ title: string; message: string } | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<{
+    title: string;
+    message: string;
+    showSettings?: boolean;
+    confirmLabel?: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const webMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const webStreamRef = useRef<MediaStream | null>(null);
@@ -184,6 +215,46 @@ export default function ChatDetailScreen() {
       flatListRef.current?.scrollToOffset({ offset: 0, animated });
     });
   }, []);
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
+
+  const replySenderLabel = (senderId: string) =>
+    String(senderId) === String(currentUserId)
+      ? t('chat.you')
+      : headerName || t('common.chat');
+
+  const replySnippet = (reply: { text?: string; messageType?: Message['messageType'] }) => {
+    if (reply.messageType === 'location') {
+      return `📍 ${reply.text?.trim() ? phonetic(reply.text) : t('chatList.location')}`;
+    }
+    if (reply.text?.trim()) return phonetic(reply.text);
+    if (reply.messageType === 'image') return `📷 ${t('chatList.photo')}`;
+    if (reply.messageType === 'audio') return `🎤 ${t('chatList.voiceMessage')}`;
+    return '';
+  };
+
+  const startReply = (message: Message) => {
+    setReplyingTo(message);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
+  };
+
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKeyboardVisible(true);
+      scrollToLatest();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollToLatest]);
 
   useEffect(() => {
     if (paramReceiverId) {
@@ -240,7 +311,7 @@ export default function ChatDetailScreen() {
       const diff = expiryDate.getTime() - now.getTime();
 
       if (diff <= 0) {
-        setTimeLeft('Expired');
+        setTimeLeft(t('time.expired'));
         return;
       }
 
@@ -248,13 +319,13 @@ export default function ChatDetailScreen() {
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-      setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
+      setTimeLeft(t('time.countdown', { hours, minutes, seconds }));
     };
 
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [expiresAt, isSubscribed, slotBlocked]);
+  }, [expiresAt, isSubscribed, slotBlocked, t]);
 
   useEffect(() => {
     if (slotBlocked) return;
@@ -320,16 +391,16 @@ export default function ChatDetailScreen() {
       };
       const data = err.response?.data || err;
       const code = data?.code;
-      const msg = data?.message || 'Unable to open this chat';
+      const msg = data?.message || t('chat.unableToOpen');
 
       if (code === 'CHAT_LIMIT_REACHED') {
         setSlotBlocked(true);
         Alert.alert(
-          'Chat slots are full',
-          'Chat slots are full. Try after 24 hours.',
+          t('chat.slotsFullTitle'),
+          t('chat.slotsFullMessage'),
           [
-            { text: 'Go Back', onPress: () => router.back() },
-            { text: 'OK' },
+            { text: t('chat.goBack'), onPress: () => router.back() },
+            { text: t('common.ok') },
           ]
         );
       } else if (code === 'USER_BLOCKED') {
@@ -337,7 +408,7 @@ export default function ChatDetailScreen() {
         setBlockedByMe(!!data?.blockedByMe);
         setBlockMessage(msg);
       } else {
-        Alert.alert('Error', msg, [{ text: 'OK', onPress: () => router.back() }]);
+        Alert.alert(t('common.error'), msg, [{ text: t('common.ok'), onPress: () => router.back() }]);
       }
     }
   };
@@ -377,13 +448,13 @@ export default function ChatDetailScreen() {
 
   const showVanishingInfo = () => {
     Alert.alert(
-      'Chat Slot Timer',
+      t('chat.slotTimerTitle'),
       isPinned
-        ? 'This chat is pinned and keeps its slot until you unpin it.'
-        : `This chat uses one of your 3 free slots for 24 hours from when you opened it.\n\nTime remaining: ${timeLeft}\n\nPin the chat to keep the slot after 24 hours.`,
+        ? t('chat.slotTimerPinned')
+        : t('chat.slotTimerInfo', { timeLeft }),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'OK' },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.ok') },
       ]
     );
   };
@@ -396,27 +467,23 @@ export default function ChatDetailScreen() {
     if (error.response?.status === 401) {
       const isSessionReplaced = errorCode === 'SESSION_REVOKED';
       Alert.alert(
-        isSessionReplaced ? 'Signed In Elsewhere' : 'Session Expired',
+        isSessionReplaced ? t('chat.signedInElsewhereTitle') : t('chat.sessionExpiredTitle'),
         isSessionReplaced
-          ? 'This account was signed in on another device. Sign in again on this phone to continue.'
-          : 'Please login again to continue chatting.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login' as any) }]
+          ? t('chat.signedInElsewhereMessage')
+          : t('chat.sessionExpiredMessage'),
+        [{ text: t('common.ok'), onPress: () => router.replace('/auth/login' as any) }]
       );
     } else if (errorCode === 'CHAT_LIMIT_REACHED') {
-      Alert.alert(
-        'Chat slots are full',
-        'Chat slots are full. Try after 24 hours.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'OK' },
-        ]
-      );
+      showVoiceNotice(t('chat.slotsFullTitle'), t('chat.slotsFullMessage'));
     } else if (errorCode === 'USER_BLOCKED') {
       setIsChatBlocked(true);
       setBlockedByMe(!!serverError?.blockedByMe);
-      setBlockMessage(serverMsg || 'Messaging is blocked for this chat.');
+      setBlockMessage(serverMsg || t('chat.messagingBlockedForChat'));
     } else {
-      Alert.alert('Message Failed', serverMsg || error.message || 'Could not send');
+      showVoiceNotice(
+        t('chat.messageFailedTitle'),
+        serverMsg || error.message || t('chat.couldNotSend')
+      );
     }
   };
 
@@ -451,8 +518,10 @@ export default function ChatDetailScreen() {
         text: textToSend,
         conversationId: activeConversationId || undefined,
         messageType: 'text',
+        replyToId: replyingTo?._id,
       });
 
+      setReplyingTo(null);
       applySendResponse(response);
       scrollToLatest();
     } catch (error: any) {
@@ -470,10 +539,10 @@ export default function ChatDetailScreen() {
   ) => {
     if (!receiverId && !activeConversationId) return;
 
+    const caption = inputText.trim();
     try {
       setIsSending(true);
       setShowEmojiPicker(false);
-      const caption = inputText.trim();
       if (caption) setInputText('');
 
       const upload = await uploadChatMedia(uri, mimeType, filename);
@@ -484,25 +553,89 @@ export default function ChatDetailScreen() {
         mediaUrl: upload.mediaUrl,
         messageType: upload.messageType,
         mediaDuration: duration,
+        replyToId: replyingTo?._id,
       });
 
+      setReplyingTo(null);
       applySendResponse(response);
       scrollToLatest();
     } catch (error: any) {
+      if (caption) setInputText(caption);
       handleSendError(error);
     } finally {
       setIsSending(false);
     }
   };
 
-  const pickImage = async (useCamera: boolean) => {
-    setShowAttachMenu(false);
+  const sendCurrentLocation = async () => {
+    if (!receiverId && !activeConversationId) return;
+    try {
+      setIsSharingLocation(true);
+      let place;
+      try {
+        place = await fetchLiveLocation();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        showVoiceNotice(
+          t('chat.locationFailedTitle'),
+          getLocationErrorMessage(error),
+          Platform.OS !== 'web' &&
+            (message === 'PERMISSION_DENIED' || message === 'LOCATION_SERVICES_DISABLED')
+        );
+        return;
+      }
+      const [lng, lat] = place.coordinates;
+      const response = await sendMessage({
+        receiverId: (receiverId as string) || undefined,
+        conversationId: activeConversationId || undefined,
+        messageType: 'location',
+        location: { lat, lng, address: place.address },
+        replyToId: replyingTo?._id,
+      });
+      setReplyingTo(null);
+      applySendResponse(response);
+      scrollToLatest();
+    } catch (error: any) {
+      handleSendError(error);
+    } finally {
+      setIsSharingLocation(false);
+    }
+  };
+
+  const toggleAttachMenu = () => {
+    if (slotBlocked || isChatBlocked) return;
+    if (!showAttachMenu) {
+      Keyboard.dismiss();
+      setShowEmojiPicker(false);
+    }
+    setShowAttachMenu((prev) => !prev);
+  };
+
+  const shareLocation = () => {
     setShowEmojiPicker(false);
+    setShowAttachMenu(false);
+    if (slotBlocked || isChatBlocked || isSending || isSharingLocation) return;
+    // In-app modal instead of Alert.alert, which does nothing on web.
+    setVoiceNotice({
+      title: t('chat.shareLocationTitle'),
+      message: t('chat.shareLocationMessage'),
+      confirmLabel: t('chat.shareLocationConfirm'),
+      onConfirm: () => void sendCurrentLocation(),
+    });
+  };
+
+  const openLocation = (location: { lat: number; lng: number }) => {
+    Linking.openURL(googleMapsUrl(location.lat, location.lng)).catch(() =>
+      showVoiceNotice(t('common.error'), t('chat.openMapsFailed'))
+    );
+  };
+
+  const pickImage = async () => {
+    setShowEmojiPicker(false);
+    setShowAttachMenu(false);
     if (slotBlocked || isChatBlocked || isSending) return;
 
-    const uri = useCamera
-      ? await pickImageFromCamera({ allowsEditing: false, quality: 0.8 })
-      : await pickImageFromLibrary({ allowsEditing: false, quality: 0.8 });
+    const uri = await pickImageFromLibrary({ allowsEditing: false, quality: 0.8 });
 
     if (!uri) return;
 
@@ -522,8 +655,8 @@ export default function ChatDetailScreen() {
     setInputText((prev) => prev + emoji);
   };
 
-  const showVoiceNotice = (title: string, message: string) => {
-    setVoiceNotice({ title, message });
+  const showVoiceNotice = (title: string, message: string, showSettings = false) => {
+    setVoiceNotice({ title, message, showSettings });
   };
 
   const clearRecordingTimer = () => {
@@ -547,24 +680,24 @@ export default function ChatDetailScreen() {
     if (slotBlocked || isChatBlocked || isSending) {
       if (slotBlocked) {
         showVoiceNotice(
-          'Chat slots are full',
-          'Chat slots are full. Try after 24 hours.'
+          t('chat.slotsFullTitle'),
+          t('chat.slotsFullMessage')
         );
       } else if (isChatBlocked) {
-        showVoiceNotice('Messaging blocked', blockMessage || 'You cannot message this user.');
+        showVoiceNotice(t('chat.messagingBlocked'), blockMessage || t('chat.cannotMessageUser'));
       }
       return;
     }
 
     if (!receiverId && !activeConversationId) {
-      showVoiceNotice('Chat not ready', 'Please wait for the chat to load.');
+      showVoiceNotice(t('chat.chatNotReadyTitle'), t('chat.chatNotReadyMessage'));
       return;
     }
 
     try {
       if (Platform.OS === 'web') {
         if (!navigator.mediaDevices?.getUserMedia) {
-          showVoiceNotice('Not supported', 'Voice recording is not supported in this browser.');
+          showVoiceNotice(t('chat.notSupportedTitle'), t('chat.voiceNotSupported'));
           return;
         }
 
@@ -586,9 +719,11 @@ export default function ChatDetailScreen() {
 
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
+        // Once denied for good, the OS no longer shows the prompt; only Settings can grant it.
         showVoiceNotice(
-          'Permission needed',
-          'Allow microphone access in settings to send voice messages.'
+          t('chat.permissionNeededTitle'),
+          t('chat.micPermissionMessage'),
+          !status.canAskAgain
         );
         return;
       }
@@ -603,7 +738,7 @@ export default function ChatDetailScreen() {
       beginRecordingTimer();
     } catch (error) {
       console.error('Voice recording start failed:', error);
-      showVoiceNotice('Recording failed', 'Could not start voice recording. Try again.');
+      showVoiceNotice(t('chat.recordingFailedTitle'), t('chat.recordingStartFailed'));
       setIsRecording(false);
       clearRecordingTimer();
     }
@@ -642,7 +777,7 @@ export default function ChatDetailScreen() {
 
     if (duration < 1) {
       await cancelRecording();
-      showVoiceNotice('Too short', 'Record for at least one second before sending.');
+      showVoiceNotice(t('chat.tooShortTitle'), t('chat.tooShortMessage'));
       return;
     }
 
@@ -677,14 +812,14 @@ export default function ChatDetailScreen() {
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       if (!uri) {
-        showVoiceNotice('Recording failed', 'No audio was captured. Please try again.');
+        showVoiceNotice(t('chat.recordingFailedTitle'), t('chat.noAudioCaptured'));
         return;
       }
 
       await sendMediaMessage(uri, 'audio/m4a', `voice-${Date.now()}.m4a`, duration);
     } catch (error) {
       console.error('Voice recording send failed:', error);
-      showVoiceNotice('Recording failed', 'Could not send voice message. Please try again.');
+      showVoiceNotice(t('chat.recordingFailedTitle'), t('chat.voiceSendFailed'));
     }
   };
 
@@ -695,7 +830,7 @@ export default function ChatDetailScreen() {
       await fetchMsgs();
       Linking.openURL(`tel:${phone}`);
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not start call');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('callRequest.couldNotStartCall'));
     } finally {
       setRespondingCallId(null);
     }
@@ -707,7 +842,7 @@ export default function ChatDetailScreen() {
       await callRequestService.decline(messageId);
       fetchMsgs();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not decline request');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('callRequest.couldNotDecline'));
     } finally {
       setRespondingCallId(null);
     }
@@ -715,12 +850,12 @@ export default function ChatDetailScreen() {
 
   const handleHeaderCallRequest = async () => {
     if (!receiverId) {
-      Alert.alert('Error', 'Call is not available for this chat yet.');
+      Alert.alert(t('common.error'), t('chat.callNotAvailable'));
       return;
     }
 
     if (currentUserId && String(currentUserId) === String(receiverId)) {
-      Alert.alert('Error', 'You cannot call yourself');
+      Alert.alert(t('common.error'), t('chat.cannotCallYourself'));
       return;
     }
 
@@ -738,9 +873,9 @@ export default function ChatDetailScreen() {
       });
 
       await fetchMsgs();
-      Alert.alert('Call request sent', 'The user will get a call request in chat.');
+      Alert.alert(t('chat.callRequestSentTitle'), t('chat.callRequestSentMessage'));
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to send call request');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('chat.callRequestFailed'));
     } finally {
       setRequestingCall(false);
     }
@@ -753,9 +888,9 @@ export default function ChatDetailScreen() {
       await blockUser(receiverId as string);
       setIsChatBlocked(true);
       setBlockedByMe(true);
-      setBlockMessage('You blocked this user. Unblock them to send messages.');
+      setBlockMessage(t('chat.youBlockedUser'));
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not block user');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('chat.couldNotBlock'));
     }
   };
 
@@ -768,7 +903,7 @@ export default function ChatDetailScreen() {
       setBlockedByMe(false);
       setBlockMessage('');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not unblock user');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('chat.couldNotUnblock'));
     }
   };
 
@@ -785,19 +920,47 @@ export default function ChatDetailScreen() {
       setShowReportModal(false);
       setShowChatMenu(false);
       Alert.alert(
-        'Report submitted',
-        'Thank you. Our team will review this report and take action if needed.'
+        t('chat.reportSubmittedTitle'),
+        t('chat.reportSubmittedMessage')
       );
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not submit report');
+      Alert.alert(t('common.error'), error.response?.data?.message || t('chat.couldNotSubmitReport'));
     } finally {
       setSubmittingReport(false);
     }
   };
 
+  const renderReplyQuote = (item: Message, isMe: boolean) => {
+    const reply = item.replyTo;
+    if (!reply?.messageId) return null;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => jumpToMessage(String(reply.messageId))}
+        style={[styles.replyQuote, isMe ? styles.replyQuoteMe : styles.replyQuoteOther]}
+      >
+        <Text
+          style={[styles.replyQuoteName, isMe ? styles.replyQuoteNameMe : styles.replyQuoteNameOther]}
+          numberOfLines={1}
+        >
+          {replySenderLabel(reply.sender)}
+        </Text>
+        <Text
+          style={[styles.replyQuoteText, isMe ? styles.replyQuoteTextMe : styles.replyQuoteTextOther]}
+          numberOfLines={2}
+          textBreakStrategy="simple"
+        >
+          {replySnippet(reply)}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = String(item.sender) === String(currentUserId);
     const timeText = formatMessageTime(item.createdAt);
+    const canReply = !slotBlocked && !isChatBlocked;
+    const highlightStyle = highlightedId === item._id ? styles.messageHighlighted : null;
 
     if (item.messageType === 'call_request') {
       if (isMe) {
@@ -807,16 +970,15 @@ export default function ChatDetailScreen() {
               <View style={styles.callRequestHeader}>
                 <Ionicons name="call" size={18} color="#fff" />
                 <Text style={[styles.messageText, styles.meMessageText, styles.callRequestTitle]}>
-                  Call request has been sent
+                  {t('chat.callRequestSentBubble')}
                 </Text>
               </View>
               <Text style={[styles.callRequestSub, styles.meTimeText]}>
-                Waiting for them to call you back
+                {t('chat.waitingForCallback')}
               </Text>
               <Text
                 style={[styles.timeText, styles.meTimeText]}
                 allowFontScaling={false}
-                numberOfLines={1}
               >
                 {timeText}
               </Text>
@@ -831,11 +993,11 @@ export default function ChatDetailScreen() {
             <View style={styles.callRequestHeader}>
               <Ionicons name="call" size={18} color="#FF9500" />
               <Text style={[styles.messageText, styles.otherMessageText, styles.callRequestTitleDark]}>
-                Incoming call request
+                {t('chat.incomingCallRequest')}
               </Text>
             </View>
             <Text style={styles.callRequestSubDark}>
-              Phone number hidden until you tap Call
+              {t('callRequest.phoneHidden')}
             </Text>
             {item.callRequestStatus === 'pending' ? (
               <View style={styles.callRequestActions}>
@@ -849,7 +1011,7 @@ export default function ChatDetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="call" size={16} color="#fff" />
-                      <Text style={styles.callAcceptText}>Call</Text>
+                      <Text style={styles.callAcceptText}>{t('common.call')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -858,7 +1020,7 @@ export default function ChatDetailScreen() {
                   onPress={() => handleDeclineCallRequest(item._id)}
                   disabled={respondingCallId === item._id}
                 >
-                  <Text style={styles.callDeclineText}>Decline</Text>
+                  <Text style={styles.callDeclineText}>{t('callRequest.decline')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -867,7 +1029,6 @@ export default function ChatDetailScreen() {
             <Text
               style={[styles.timeText, styles.otherTimeText]}
               allowFontScaling={false}
-              numberOfLines={1}
             >
               {timeText}
             </Text>
@@ -878,72 +1039,152 @@ export default function ChatDetailScreen() {
 
     if (item.messageType === 'image' && item.mediaUrl) {
       return (
-        <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper]}>
-          <View style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble, styles.mediaBubble]}>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => setPreviewImageUrl(item.mediaUrl!)}
+        <SwipeToReply onReply={() => startReply(item)} enabled={canReply}>
+          <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper, highlightStyle]}>
+            <Pressable
+              style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble, styles.mediaBubble]}
+              onLongPress={() => startReply(item)}
+              disabled={!canReply}
             >
-              <Image source={{ uri: item.mediaUrl }} style={styles.chatImage} resizeMode="cover" />
-            </TouchableOpacity>
-            {item.text ? (
-              <Text style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText, styles.mediaCaption]}>
-                {item.text}
+              {renderReplyQuote(item, isMe)}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setPreviewImageUrl(item.mediaUrl!)}
+                onLongPress={canReply ? () => startReply(item) : undefined}
+              >
+                <Image source={{ uri: item.mediaUrl }} style={styles.chatImage} resizeMode="cover" />
+              </TouchableOpacity>
+              {item.text ? (
+                <Text
+                  style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText, styles.mediaCaption]}
+                  textBreakStrategy="simple"
+                >
+                  {phonetic(item.text)}
+                </Text>
+              ) : null}
+              <Text
+                style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
+                allowFontScaling={false}
+              >
+                {timeText}
               </Text>
-            ) : null}
-            <Text
-              style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
-              allowFontScaling={false}
-              numberOfLines={1}
-            >
-              {timeText}
-            </Text>
+            </Pressable>
           </View>
-        </View>
+        </SwipeToReply>
+      );
+    }
+
+    if (item.messageType === 'location' && item.location) {
+      const sharedLocation = item.location;
+      return (
+        <SwipeToReply onReply={() => startReply(item)} enabled={canReply}>
+          <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper, highlightStyle]}>
+            <Pressable
+              style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble, styles.locationBubble]}
+              onPress={() => openLocation(sharedLocation)}
+              onLongPress={canReply ? () => startReply(item) : undefined}
+              accessibilityRole="link"
+              accessibilityLabel={t('chat.openInGoogleMaps')}
+            >
+              {renderReplyQuote(item, isMe)}
+              <View style={styles.locationCard}>
+                <View style={[styles.locationIcon, isMe ? styles.locationIconMe : styles.locationIconOther]}>
+                  <Ionicons name="location" size={22} color={isMe ? '#FF9500' : '#fff'} />
+                </View>
+                <View style={styles.locationInfo}>
+                  <Text
+                    style={[styles.locationTitle, isMe ? styles.meMessageText : styles.otherMessageText]}
+                    numberOfLines={1}
+                  >
+                    {t('chatList.location')}
+                  </Text>
+                  <Text
+                    style={[styles.locationAddress, isMe ? styles.locationAddressMe : styles.locationAddressOther]}
+                    numberOfLines={2}
+                  >
+                    {sharedLocation.address
+                      ? phonetic(sharedLocation.address)
+                      : `${sharedLocation.lat.toFixed(5)}, ${sharedLocation.lng.toFixed(5)}`}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.locationLinkRow, isMe ? styles.locationLinkRowMe : styles.locationLinkRowOther]}>
+                <Ionicons name="map-outline" size={15} color={isMe ? '#fff' : '#FF9500'} />
+                <Text style={[styles.locationLinkText, isMe ? styles.locationLinkTextMe : styles.locationLinkTextOther]}>
+                  {t('chat.openInGoogleMaps')}
+                </Text>
+              </View>
+              <Text
+                style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
+                allowFontScaling={false}
+              >
+                {timeText}
+              </Text>
+            </Pressable>
+          </View>
+        </SwipeToReply>
       );
     }
 
     if (item.messageType === 'audio' && item.mediaUrl) {
       return (
-        <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper]}>
-          <View style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble, styles.mediaBubble]}>
-            <AudioMessageBubble uri={item.mediaUrl} duration={item.mediaDuration} isMe={isMe} />
-            {item.text ? (
-              <Text style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText, styles.mediaCaption]}>
-                {item.text}
-              </Text>
-            ) : null}
-            <Text
-              style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
-              allowFontScaling={false}
-              numberOfLines={1}
+        <SwipeToReply onReply={() => startReply(item)} enabled={canReply}>
+          <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper, highlightStyle]}>
+            <Pressable
+              style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble, styles.mediaBubble]}
+              onLongPress={() => startReply(item)}
+              disabled={!canReply}
             >
-              {timeText}
-            </Text>
+              {renderReplyQuote(item, isMe)}
+              <AudioMessageBubble uri={item.mediaUrl} duration={item.mediaDuration} isMe={isMe} />
+              {item.text ? (
+                <Text
+                  style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText, styles.mediaCaption]}
+                  textBreakStrategy="simple"
+                >
+                  {phonetic(item.text)}
+                </Text>
+              ) : null}
+              <Text
+                style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText, styles.mediaTime]}
+                allowFontScaling={false}
+              >
+                {timeText}
+              </Text>
+            </Pressable>
           </View>
-        </View>
+        </SwipeToReply>
       );
     }
 
     return (
-      <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper]}>
-        <View style={styles.messageRow}>
-          <View style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble]}>
-            <Text style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText]}>
-              {item.text}
-            </Text>
-            <View style={styles.messageFooter}>
+      <SwipeToReply onReply={() => startReply(item)} enabled={canReply}>
+        <View style={[styles.messageWrapper, isMe ? styles.meWrapper : styles.otherWrapper, highlightStyle]}>
+          <View style={styles.messageRow}>
+            <Pressable
+              style={[styles.bubble, isMe ? styles.meBubble : styles.otherBubble]}
+              onLongPress={() => startReply(item)}
+              disabled={!canReply}
+            >
+              {renderReplyQuote(item, isMe)}
               <Text
-                style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText]}
-                allowFontScaling={false}
-                numberOfLines={1}
+                style={[styles.messageText, isMe ? styles.meMessageText : styles.otherMessageText]}
+                textBreakStrategy="simple"
               >
-                {timeText}
+                {phonetic(item.text)}
               </Text>
-            </View>
+              <View style={styles.messageFooter}>
+                <Text
+                  style={[styles.timeText, isMe ? styles.meTimeText : styles.otherTimeText]}
+                  allowFontScaling={false}
+                >
+                  {timeText}
+                </Text>
+              </View>
+            </Pressable>
           </View>
         </View>
-      </View>
+      </SwipeToReply>
     );
   };
 
@@ -954,6 +1195,15 @@ export default function ChatDetailScreen() {
     () => (Array.isArray(messages) ? [...messages] : []).reverse(),
     [messages]
   );
+
+  const jumpToMessage = (messageId: string) => {
+    const index = invertedMessages.findIndex((m) => m._id === messageId);
+    if (index < 0) return;
+    flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    setHighlightedId(messageId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 1500);
+  };
 
   return (
     <View style={styles.container}>
@@ -979,16 +1229,16 @@ export default function ChatDetailScreen() {
             {typeof avatarUrl === 'string' && avatarUrl.trim() ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
             ) : (
-              <Text style={styles.avatarText}>{avatarLetter || 'R'}</Text>
+              <Text style={styles.avatarText}>{(headerName !== name && headerName?.[0]) || avatarLetter || 'R'}</Text>
             )}
             <View style={styles.onlineDot} />
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerName} numberOfLines={1}>{name || 'Chat'}</Text>
+            <Text style={styles.headerName} numberOfLines={1}>{headerName || t('common.chat')}</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDotSmall} />
               <Text style={styles.headerStatus}>
-                {isPinned ? 'Pinned' : 'Online'}
+                {isPinned ? t('chat.pinned') : t('chat.online')}
               </Text>
             </View>
           </View>
@@ -1020,17 +1270,22 @@ export default function ChatDetailScreen() {
         <View style={styles.blockedBanner}>
           <Ionicons name="ban-outline" size={18} color="#B91C1C" />
           <Text style={styles.blockedBannerText}>
-            {blockMessage || 'Messaging is not available for this chat.'}
+            {blockMessage || t('chat.messagingNotAvailable')}
           </Text>
           {blockedByMe && receiverId && (
             <TouchableOpacity onPress={handleUnblockUser}>
-              <Text style={styles.unblockLink}>Unblock</Text>
+              <Text style={styles.unblockLink}>{t('common.unblock')}</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
 
-      <View style={styles.keyboardView}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        // Without keyboard-controller, Android's adjustResize already shrinks the window
+        behavior={Platform.OS === 'ios' || isKeyboardControllerLinked ? 'padding' : undefined}
+      >
+      <View style={styles.messagesArea}>
         {showSlotTimer && (
           <View style={styles.timerFloat} pointerEvents="box-none">
             <View style={styles.timerBar}>
@@ -1040,7 +1295,7 @@ export default function ChatDetailScreen() {
                 color="#EF4444"
               />
               <Text style={styles.timerText}>
-                {expiresAt ? timeLeft : 'Pinned'}
+                {expiresAt ? timeLeft : t('chat.pinned')}
               </Text>
               <TouchableOpacity
                 onPress={showVanishingInfo}
@@ -1060,7 +1315,7 @@ export default function ChatDetailScreen() {
         ) : messages.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
-              Say hello to start the conversation and please don&apos;t share any confidential data
+              {t('chat.emptyConversation')}
             </Text>
           </View>
         ) : (
@@ -1074,8 +1329,18 @@ export default function ChatDetailScreen() {
               styles.messagesList,
               showSlotTimer ? { paddingBottom: 40 } : null,
             ]}
-            extraData={currentUserId}
+            extraData={`${currentUserId}:${highlightedId}:${slotBlocked}:${isChatBlocked}`}
             renderItem={renderMessage}
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              // Target row not measured yet: jump near it, then retry once rows render.
+              flatListRef.current?.scrollToOffset({
+                offset: averageItemLength * index,
+                animated: false,
+              });
+              setTimeout(() => {
+                flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+              }, 250);
+            }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
@@ -1087,11 +1352,53 @@ export default function ChatDetailScreen() {
         )}
       </View>
 
-      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View
+          style={[
+            styles.inputBar,
+            { paddingBottom: keyboardVisible ? 10 : Math.max(insets.bottom, 10) },
+          ]}
+        >
           {showEmojiPicker && !isRecording && (
             <View style={styles.emojiDock}>
               <ChatEmojiPicker onSelect={handleSelectEmoji} />
+            </View>
+          )}
+
+          {showAttachMenu && !isRecording && (
+            <View style={styles.attachMenu}>
+              <TouchableOpacity style={styles.attachOption} onPress={pickImage} activeOpacity={0.8}>
+                <View style={[styles.attachOptionIcon, { backgroundColor: '#8B5CF6' }]}>
+                  <Ionicons name="image" size={24} color="#fff" />
+                </View>
+                <Text style={styles.attachOptionLabel}>{t('chatList.photo')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.attachOption} onPress={shareLocation} activeOpacity={0.8}>
+                <View style={[styles.attachOptionIcon, { backgroundColor: '#22C55E' }]}>
+                  <Ionicons name="location" size={24} color="#fff" />
+                </View>
+                <Text style={styles.attachOptionLabel}>{t('chatList.location')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {replyingTo && !isRecording && (
+            <View style={styles.replyPreview}>
+              <View style={styles.replyPreviewAccent} />
+              <View style={styles.replyPreviewBody}>
+                <Text style={styles.replyPreviewName} numberOfLines={1}>
+                  {replySenderLabel(replyingTo.sender)}
+                </Text>
+                <Text style={styles.replyPreviewText} numberOfLines={1}>
+                  {replySnippet(replyingTo)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setReplyingTo(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={t('chat.cancelReply')}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1103,7 +1410,7 @@ export default function ChatDetailScreen() {
               <View style={styles.recordingCenter}>
                 <View style={styles.recordingDot} />
                 <Text style={styles.recordingText}>
-                  Recording {formatAudioDuration(recordingSeconds)}
+                  {t('chat.recording', { duration: formatAudioDuration(recordingSeconds) })}
                 </Text>
               </View>
               <TouchableOpacity onPress={stopRecordingAndSend} style={styles.sendBtn}>
@@ -1115,22 +1422,33 @@ export default function ChatDetailScreen() {
               <TouchableOpacity
                 style={[
                   styles.attachBtn,
-                  (slotBlocked || isChatBlocked || isSending) && styles.attachBtnDisabled,
+                  (slotBlocked || isChatBlocked || isSending || isSharingLocation) &&
+                    styles.attachBtnDisabled,
                 ]}
-                onPress={() => setShowAttachMenu(true)}
-                disabled={slotBlocked || isChatBlocked || isSending}
+                onPress={toggleAttachMenu}
+                disabled={slotBlocked || isChatBlocked || isSending || isSharingLocation}
+                accessibilityLabel={t('chat.attach')}
               >
-                <Ionicons name="image-outline" size={22} color="#64748B" />
+                {isSharingLocation ? (
+                  <ActivityIndicator size="small" color="#FF9500" />
+                ) : (
+                  <Ionicons
+                    name={showAttachMenu ? 'close' : 'add'}
+                    size={26}
+                    color={showAttachMenu ? '#FF9500' : '#64748B'}
+                  />
+                )}
               </TouchableOpacity>
 
               <TextInput
+                ref={inputRef}
                 style={styles.input}
                 placeholder={
                   isChatBlocked
-                    ? 'Messaging blocked'
+                    ? t('chat.messagingBlocked')
                     : slotBlocked
-                      ? 'No free slots'
-                      : 'Type a message'
+                      ? t('chat.noFreeSlots')
+                      : t('chat.inputPlaceholder')
                 }
                 placeholderTextColor="#94a3b8"
                 value={inputText}
@@ -1139,6 +1457,7 @@ export default function ChatDetailScreen() {
                 editable={!slotBlocked && !isChatBlocked}
                 onFocus={() => {
                   setShowEmojiPicker(false);
+                  setShowAttachMenu(false);
                   scrollToLatest();
                 }}
               />
@@ -1190,39 +1509,14 @@ export default function ChatDetailScreen() {
             </>
           )}
         </View>
-      </KeyboardStickyView>
+      </KeyboardAvoidingView>
 
       {isClaimingSlot ? (
         <View style={styles.claimingOverlay}>
           <ActivityIndicator size="large" color="#FF9500" />
-          <Text style={styles.claimingText}>Opening chat...</Text>
+          <Text style={styles.claimingText}>{t('chat.openingChat')}</Text>
         </View>
       ) : null}
-
-      <Modal visible={showAttachMenu} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowAttachMenu(false)}
-        >
-          <View style={[styles.attachSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <TouchableOpacity style={styles.attachOption} onPress={() => pickImage(false)}>
-              <Ionicons name="images-outline" size={22} color="#FF9500" />
-              <Text style={styles.attachOptionText}>Photo library</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.attachOption} onPress={() => pickImage(true)}>
-              <Ionicons name="camera-outline" size={22} color="#FF9500" />
-              <Text style={styles.attachOptionText}>Take photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuCancel}
-              onPress={() => setShowAttachMenu(false)}
-            >
-              <Text style={styles.menuCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       <Modal visible={showChatMenu} transparent animationType="fade">
         <TouchableOpacity
@@ -1234,12 +1528,12 @@ export default function ChatDetailScreen() {
             {blockedByMe ? (
               <TouchableOpacity style={styles.menuItem} onPress={handleUnblockUser}>
                 <Ionicons name="checkmark-circle-outline" size={20} color="#00A300" />
-                <Text style={styles.menuItemText}>Unblock user</Text>
+                <Text style={styles.menuItemText}>{t('chat.unblockUser')}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.menuItem} onPress={handleBlockUser}>
                 <Ionicons name="ban-outline" size={20} color="#EF4444" />
-                <Text style={[styles.menuItemText, { color: '#EF4444' }]}>Block user</Text>
+                <Text style={[styles.menuItemText, { color: '#EF4444' }]}>{t('chat.blockUser')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -1250,10 +1544,10 @@ export default function ChatDetailScreen() {
               }}
             >
               <Ionicons name="flag-outline" size={20} color="#FF9500" />
-              <Text style={styles.menuItemText}>Report user</Text>
+              <Text style={styles.menuItemText}>{t('chat.reportUser')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuCancel} onPress={() => setShowChatMenu(false)}>
-              <Text style={styles.menuCancelText}>Cancel</Text>
+              <Text style={styles.menuCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1264,20 +1558,47 @@ export default function ChatDetailScreen() {
           <View style={styles.voiceNoticeSheet}>
             <Text style={styles.voiceNoticeTitle}>{voiceNotice?.title}</Text>
             <Text style={styles.voiceNoticeMessage}>{voiceNotice?.message}</Text>
-            <TouchableOpacity
-              style={styles.voiceNoticeBtn}
-              onPress={() => setVoiceNotice(null)}
-            >
-              <Text style={styles.voiceNoticeBtnText}>OK</Text>
-            </TouchableOpacity>
+            <View style={styles.voiceNoticeActions}>
+              {voiceNotice?.showSettings ? (
+                <TouchableOpacity
+                  style={styles.voiceNoticeSecondaryBtn}
+                  onPress={() => {
+                    setVoiceNotice(null);
+                    void Linking.openSettings();
+                  }}
+                >
+                  <Text style={styles.voiceNoticeSecondaryBtnText}>{t('chat.openSettings')}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {voiceNotice?.onConfirm ? (
+                <TouchableOpacity
+                  style={styles.voiceNoticeSecondaryBtn}
+                  onPress={() => setVoiceNotice(null)}
+                >
+                  <Text style={styles.voiceNoticeSecondaryBtnText}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={styles.voiceNoticeBtn}
+                onPress={() => {
+                  const onConfirm = voiceNotice?.onConfirm;
+                  setVoiceNotice(null);
+                  onConfirm?.();
+                }}
+              >
+                <Text style={styles.voiceNoticeBtnText}>
+                  {voiceNotice?.confirmLabel || t('common.ok')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
       <ReportModal
         visible={showReportModal}
-        title="Report user"
-        subtitle="Tell us what happened. An admin will review and decide if action is needed."
+        title={t('chat.reportUser')}
+        subtitle={t('chat.reportSubtitle')}
         submitting={submittingReport}
         onClose={() => setShowReportModal(false)}
         onSubmit={handleSubmitReport}
@@ -1311,7 +1632,7 @@ export default function ChatDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
@@ -1415,6 +1736,109 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 8,
   },
+  attachMenu: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  attachOption: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  attachOptionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachOptionLabel: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#334155',
+  },
+  replyPreview: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingRight: 12,
+    overflow: 'hidden',
+    gap: 10,
+  },
+  replyPreviewAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: '#FF9500',
+    borderRadius: 2,
+  },
+  replyPreviewBody: {
+    flex: 1,
+  },
+  replyPreviewName: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#FF9500',
+  },
+  replyPreviewText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#475569',
+  },
+  replyQuote: {
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+    minWidth: 120,
+  },
+  replyQuoteMe: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderLeftColor: '#fff',
+  },
+  replyQuoteOther: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderLeftColor: '#FF9500',
+  },
+  replyQuoteName: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  replyQuoteNameMe: {
+    color: '#fff',
+  },
+  replyQuoteNameOther: {
+    color: '#FF9500',
+  },
+  replyQuoteText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  replyQuoteTextMe: {
+    color: 'rgba(255,255,255,0.9)',
+  },
+  replyQuoteTextOther: {
+    color: '#475569',
+  },
+  messageHighlighted: {
+    backgroundColor: 'rgba(255,149,0,0.15)',
+    borderRadius: 12,
+  },
   timerFloat: {
     position: 'absolute',
     top: 8,
@@ -1454,6 +1878,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   keyboardView: { flex: 1 },
+  messagesArea: { flex: 1 },
   claimingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(248, 249, 250, 0.92)',
@@ -1529,6 +1954,7 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   bubble: {
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
     paddingRight: 16,
@@ -1548,7 +1974,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF9500',
     borderBottomRightRadius: 4,
   },
+  // Bundled font: OEM system fonts on some Android phones render wider than RN measures, clipping words.
   messageText: {
+    fontFamily: 'Inter_400Regular',
     fontSize: 15,
     lineHeight: 20,
   },
@@ -1564,10 +1992,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignSelf: 'flex-end',
     marginTop: 6,
-    minWidth: 72,
     paddingRight: 2,
   },
   timeText: {
+    fontFamily: 'Inter_400Regular',
     fontSize: 11,
     lineHeight: 14,
     flexShrink: 0,
@@ -1596,11 +2024,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   callRequestTitle: {
-    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
     flexShrink: 1,
   },
   callRequestTitleDark: {
-    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
     color: '#0F172A',
     flexShrink: 1,
   },
@@ -1663,11 +2091,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   attachBtn: {
-    width: 40,
+    width: 36,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 4,
+    marginRight: 2,
   },
   attachBtnDisabled: {
     opacity: 0.5,
@@ -1754,6 +2182,76 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     alignSelf: 'flex-end',
   },
+  locationBubble: {
+    padding: 8,
+    width: 250,
+    maxWidth: '78%',
+  },
+  locationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+    paddingTop: 2,
+  },
+  locationIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationIconMe: {
+    backgroundColor: '#fff',
+  },
+  locationIconOther: {
+    backgroundColor: '#FF9500',
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  locationAddress: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  locationAddressMe: {
+    color: 'rgba(255,255,255,0.9)',
+  },
+  locationAddressOther: {
+    color: '#475569',
+  },
+  locationLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  locationLinkRowMe: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  locationLinkRowOther: {
+    backgroundColor: '#FFF5E6',
+  },
+  locationLinkText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  locationLinkTextMe: {
+    color: '#fff',
+  },
+  locationLinkTextOther: {
+    color: '#FF9500',
+  },
   audioBubble: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1783,26 +2281,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  attachSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  attachOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  attachOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
   voiceNoticeOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1829,8 +2307,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 16,
   },
+  voiceNoticeActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+  },
+  voiceNoticeSecondaryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  voiceNoticeSecondaryBtnText: {
+    color: '#FF9500',
+    fontWeight: '700',
+    fontSize: 15,
+  },
   voiceNoticeBtn: {
-    alignSelf: 'flex-end',
     backgroundColor: '#FF9500',
     paddingHorizontal: 20,
     paddingVertical: 10,

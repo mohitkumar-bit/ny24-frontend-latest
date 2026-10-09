@@ -17,8 +17,12 @@ export interface JobPost {
   author: any;
   status: string;
   createdAt: string;
+  publishedAt?: string | null;
+  expiresAt?: string | null;
+  isArchived?: boolean;
   isFeatured?: boolean;
   featuredAt?: string | null;
+  featuredEndsAt?: string | null;
   isVideoPost?: boolean;
   isVideoActive?: boolean;
   videoUrl?: string | null;
@@ -261,5 +265,10 @@ export const jobService = {
       kind?: string;
       message?: string;
     };
+  },
+
+  async repostJob(jobId: string) {
+    const response = await api.post(`/job/${jobId}/repost`);
+    return response.data as { success: boolean; job: JobPost; message?: string };
   },
 };
